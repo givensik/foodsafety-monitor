@@ -1,0 +1,10 @@
+{
+  "name": "foodsafety-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "식품안전나라 실시간 인허가 모니터링 대시보드 (Cloudflare Pages + Functions + KV)",
+  "scripts": {
+    "dev": "npx wrangler@3 pages dev public --port 8788",
+    "deploy": "npx wrangler@3 pages deploy public --project-name=foodsafety-monitor --branch=main"
+  }
+}

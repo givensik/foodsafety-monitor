@@ -1,0 +1,7 @@
+name = "foodsafety-monitor"
+compatibility_date = "2026-10-17"
+pages_build_output_dir = "public"
+
+[[kv_namespaces]]
+binding = "DETECTED_STORES"
+id = "6c55919c3d3c423d9d9f98013cdfe631"
