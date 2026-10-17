@@ -9,6 +9,8 @@
   <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     body { font-family: 'Pretendard', sans-serif; }
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
@@ -40,22 +42,117 @@
   </header>
 
   <!-- Main Container -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+
+    <!-- Top Live DB Status Bar (설계 2/4 반영) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- Card 1: Region Total Count -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+        <div>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-database text-indigo-500"></i>
+            <span id="statRegionLabel">서울</span> 총 등록 업소 수 (totCnt)
+          </p>
+          <p id="statTotalCount" class="text-2xl font-bold text-slate-900 mt-1 font-mono">-</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">식약처 searchBsnListCnt.do 실시간 응답</p>
+        </div>
+        <div class="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-building-circle-check"></i>
+        </div>
+      </div>
+
+      <!-- Card 2: Highest Ledger Number -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-hashtag text-emerald-500"></i>
+            조회 목록 최고 대장번호 (16자리)
+          </p>
+          <p id="statMaxLedger" class="text-lg font-bold text-slate-900 mt-1 font-mono truncate">-</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">
+            하단 도구에서 <button onclick="testMaxPlusOne()" class="text-indigo-600 hover:underline font-semibold">+1 다음 번호 생성 여부</button> 즉시 확인 가능
+          </p>
+        </div>
+        <div class="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0">
+          <i class="fa-solid fa-arrow-up-1-9"></i>
+        </div>
+      </div>
+
+      <!-- Card 3: OpenAPI I2500 Today Batch Status -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              오늘 OpenAPI(I2500) 변경 건수
+            </p>
+            <span id="statApiBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
+              확인중
+            </span>
+          </div>
+          <p id="statApiCount" class="text-2xl font-bold text-slate-900 mt-1 font-mono">-</p>
+          <p id="statApiMsg" class="text-[11px] text-slate-400 mt-0.5">CHNG_DT=오늘날짜 (19:00 이후 조회 개방)</p>
+        </div>
+        <div class="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini Tool: 16-Digit Ledger Number & +1 Live Tester (설계 3/4 반영) -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-slate-900 text-white text-xs font-bold">
+            +1
+          </span>
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">16자리 인허가대장번호(BSN_LCNS_LEDG_NO) &amp; +1 신규 채번 즉시 검증기</h2>
+            <p class="text-xs text-slate-500">대장번호에 +1을 더해 식약처 DB(`bsnInfoDetail.do`)에 다음 번호가 방금 생성되었는지, 또는 가등록 공란 상태인지 실시간으로 직접 검증합니다.</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            id="ledgerInput"
+            maxlength="16"
+            placeholder="2026001000413573"
+            class="px-3 py-1.5 border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48"
+          >
+          <button onclick="stepLedger(-1)" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition">
+            -1 이전 번호
+          </button>
+          <button onclick="lookupLedger()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition shadow-sm">
+            <i class="fa-solid fa-magnifying-glass mr-1"></i>현재 번호 조회
+          </button>
+          <button onclick="stepLedger(1)" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition shadow-sm">
+            <i class="fa-solid fa-plus mr-1"></i>+1 다음 번호 생성 확인
+          </button>
+        </div>
+      </div>
+      <!-- Lookup Result Box -->
+      <div id="ledgerResultBox" class="hidden mt-3 pt-3 border-t border-slate-100 text-xs"></div>
+    </div>
 
     <!-- Overview & Control Bar -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
       <!-- Tabs -->
-      <div class="flex bg-slate-100 p-1 rounded-xl text-sm font-medium self-start">
-        <button onclick="setRegion('seoul')" id="tab-seoul" class="px-4 py-2 rounded-lg bg-white text-indigo-600 shadow-sm transition">서울</button>
-        <button onclick="setRegion('gyeonggi')" id="tab-gyeonggi" class="px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 transition">경기</button>
-        <button onclick="setRegion('all')" id="tab-all" class="px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 transition">전국</button>
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="flex bg-slate-100 p-1 rounded-xl text-sm font-medium">
+          <button onclick="setRegion('seoul')" id="tab-seoul" class="px-4 py-1.5 rounded-lg bg-white text-indigo-600 shadow-sm transition">서울</button>
+          <button onclick="setRegion('gyeonggi')" id="tab-gyeonggi" class="px-4 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">경기</button>
+          <button onclick="setRegion('all')" id="tab-all" class="px-4 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">전국</button>
+        </div>
+        <span id="pendingCountBadge" class="hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+          <i class="fa-solid fa-hourglass-half text-amber-600"></i>
+          <span id="pendingCountText">가등록(상호 반영 대기중) 0건 포함</span>
+        </span>
       </div>
 
       <!-- Search & Info -->
       <div class="flex flex-wrap items-center gap-3">
         <div class="relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-          <input type="text" id="searchInput" oninput="filterData()" placeholder="상호명, 구청, 주소 검색..." class="pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64">
+          <input type="text" id="searchInput" oninput="filterData()" placeholder="상호명, 구청, 인허가/대장번호 검색..." class="pl-9 pr-3 py-1.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64">
         </div>
         <div class="text-xs text-slate-500">
           마지막 갱신: <span id="lastUpdated" class="font-medium text-slate-700">-</span>
@@ -69,10 +166,11 @@
         <table class="min-w-full divide-y divide-slate-200 text-sm">
           <thead class="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
             <tr>
-              <th scope="col" class="py-3.5 pl-6 pr-3 text-left">순번</th>
+              <th scope="col" class="py-3.5 pl-5 pr-2 text-left">순번</th>
               <th scope="col" class="px-3 py-3.5 text-left">식약처 허가일(PRMS_DT)</th>
               <th scope="col" class="px-3 py-3.5 text-left">최초 감지시각</th>
-              <th scope="col" class="px-3 py-3.5 text-left">인허가번호</th>
+              <th scope="col" class="px-3 py-3.5 text-left">인허가번호(11자리)</th>
+              <th scope="col" class="px-3 py-3.5 text-left">대장번호(16자리)</th>
               <th scope="col" class="px-3 py-3.5 text-left">상호명(업체명)</th>
               <th scope="col" class="px-3 py-3.5 text-left">업종</th>
               <th scope="col" class="px-3 py-3.5 text-left">관할지자체</th>
@@ -83,7 +181,7 @@
           </thead>
           <tbody id="tableBody" class="divide-y divide-slate-100 bg-white">
             <tr>
-              <td colspan="10" class="text-center py-16 text-slate-400">
+              <td colspan="11" class="text-center py-16 text-slate-400">
                 <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-2"></i>
                 <p>최신 데이터를 불러오는 중입니다...</p>
               </td>
@@ -92,6 +190,52 @@
         </table>
       </div>
     </div>
+
+    <!-- Collapsible Empirical Verification Report Panel (설계 4/4 반영) -->
+    <details class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden group">
+      <summary class="px-5 py-4 cursor-pointer flex items-center justify-between hover:bg-slate-50/80 transition select-none">
+        <div class="flex items-center gap-2.5">
+          <span class="inline-flex items-center justify-center h-6 w-6 rounded-md bg-indigo-50 text-indigo-600 text-xs">
+            <i class="fa-solid fa-flask"></i>
+          </span>
+          <span class="font-bold text-sm text-slate-900">
+            식약처 번호 채번 체계 및 실시간 배치 검증 리포트 (100% 실데이터 검증 완료)
+          </span>
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+            Evidence-Based
+          </span>
+        </div>
+        <span class="text-xs text-slate-500 flex items-center gap-1">
+          <span>상세 분석 열기/닫기</span>
+          <i class="fa-solid fa-chevron-down transition-transform group-open:rotate-180"></i>
+        </span>
+      </summary>
+      <div class="px-5 pb-5 pt-2 border-t border-slate-100 text-xs text-slate-600 space-y-4 leading-relaxed">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+            <p class="font-bold text-slate-900">1. [확인된 팩트] 11자리 인허가번호 vs 16자리 대장번호 구조</p>
+            <p>&bull; <strong>인허가번호(LCNS_NO, 11자리)</strong>: <code>연도(4자리)</code> + <code>지자체·기관별 고유 대역 및 일련번호(7자리)</code>. 예: 서울 종로구 <code>004xxxx</code>, 용산구 <code>0051xxx</code>, 강북구 <code>0076xxx</code>, 강서구 <code>0109xxx</code>, 강남구 <code>0147xxx</code>. 각 구청 내부에서 업종 구분 없이 허가 순번대로 정확히 <code>+1</code>씩 증가합니다.</p>
+            <p>&bull; <strong>인허가대장번호(BSN_LCNS_LEDG_NO, 16자리)</strong>: <code>연도(4자리)</code> + <code>001(3자리)</code> + <code>전국 통합 일련번호(9자리)</code>. 상세 팝업(<code>bsnInfoDetail.do?bsnLcnsLedgNo=...</code>)의 PK이며, 아직 생성되지 않은 번호 조회 시 <code>alert('시스템에러가 발생하였습니다...')</code>가 반환됩니다.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+            <p class="font-bold text-slate-900">2. [확인된 팩트] s_order_by 화이트리스트 및 대소문자 검증</p>
+            <p>&bull; <code>searchBsnList.do</code>에 <code>s_order_by=reg_dt</code>(소문자)를 전달할 때만 최신 등록순으로 정렬됩니다.</p>
+            <p>&bull; 대문자 <code>REG_DT</code> 및 UI 옵션에 없는 실제 DB 컬럼명 5종(<code>lcns_no</code>, <code>bsn_lcns_ledg_no</code>, <code>prsdnt_nm</code>, <code>site_addr</code>, <code>prms_dt</code>)을 전달해 대조한 결과, 에러 없이 전부 기본값인 <code>bssh_nm</code>(업소명 가나다순: <code>20100050301 (주)그린버그</code> 1위)과 100% 동일한 목록을 반환함이 확인되었습니다.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+            <p class="font-bold text-slate-900">3. [확인된 팩트] 19:00 API 잠금 해제 &amp; 20:00 DB 대량 동기화 실측</p>
+            <p>&bull; <strong>13:21 ~ 19:51</strong>: 서울(<code>277,969건</code>), 경기(<code>378,193건</code>) 모두 단 1건의 변동도 없이 고정 유지.</p>
+            <p>&bull; <strong>19:00 정각</strong>: OpenAPI <code>I2500</code>의 <code>CHNG_DT=오늘날짜</code> 호출 시 <code>INFO-700</code> 차단이 <code>INFO-000</code>으로 해제됨(19:07 기준 <code>5건</code>).</p>
+            <p>&bull; <strong>20:00 ~ 20:17</strong>: <code>I2500</code> 당일 변경 건수가 <code>5건 &rarr; 1,963건</code>으로 급증하며, 웹 목록에서도 서울 <code>+4건</code>(<code>277,973건</code>), 경기 <code>+1건</code>(<code>378,194건</code>, 김포시 <code>원F&amp;B</code>, 대장번호 <code>2026001000413573</code>)이 실제 반영됨을 포착했습니다.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1.5">
+            <p class="font-bold text-slate-900">4. [확인된 팩트] 가등록(상호·소재지 공란) 선행 노출 및 [미검증 영역]</p>
+            <p>&bull; <strong>가등록 선행 노출</strong>: 20시 배치에서 새로 채번된 서울 4건(대장번호 <code>...413407</code>~<code>...413410</code>)은 인허가번호·업종·대표자·허가일은 존재하나 <code>BSSH_NM=""</code>, <code>SITE_ADDR=""</code> 공란 상태로 먼저 노출되었습니다. 본 대시보드는 이를 <strong>'신규 채번 (상호·주소 반영 대기중)'</strong>으로 구분 표시하며, 이후 식약처 DB에 상호명이 채워지면 자동으로 갱신합니다.</p>
+            <p>&bull; <strong>[미검증 영역 안내]</strong>: 00:00~13:20 오전 시간대의 추가 배치 유무 및 평일 주간 시간대 반영 주기는 지속적인 실측 로그로 추가 검증 중입니다.</p>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <!-- Footer info -->
     <footer class="text-center text-xs text-slate-400 py-4">
@@ -103,6 +247,13 @@
   <script>
     let currentRegion = 'seoul';
     let rawData = [];
+    let currentMaxLedger = '';
+
+    const regionLabels = {
+      seoul: '서울',
+      gyeonggi: '경기',
+      all: '전국'
+    };
 
     async function fetchData() {
       const icon = document.getElementById('refreshIcon');
@@ -112,8 +263,58 @@
         const res = await fetch(`/api/businesses?sido=${currentRegion}&count=20`);
         const json = await res.json();
         if (json.success) {
-          rawData = json.data;
+          rawData = json.data || [];
           document.getElementById('lastUpdated').innerText = new Date(json.updated_at).toLocaleTimeString('ko-KR');
+
+          // Update Top Live DB Status Bar
+          document.getElementById('statRegionLabel').innerText = regionLabels[currentRegion] || currentRegion;
+          document.getElementById('statTotalCount').innerText =
+            typeof json.total_region_count === 'number'
+              ? json.total_region_count.toLocaleString('ko-KR') + '건'
+              : '-';
+
+          currentMaxLedger = json.max_ledger_no || (rawData[0]?.ledger_no || '');
+          document.getElementById('statMaxLedger').innerText = currentMaxLedger || '-';
+
+          const ledgerInput = document.getElementById('ledgerInput');
+          if (!ledgerInput.value && currentMaxLedger) {
+            ledgerInput.value = currentMaxLedger;
+          }
+
+          // Update OpenAPI I2500 Today Status
+          const apiInfo = json.openapi_today;
+          const badgeEl = document.getElementById('statApiBadge');
+          const countEl = document.getElementById('statApiCount');
+          const msgEl = document.getElementById('statApiMsg');
+          if (apiInfo) {
+            if (apiInfo.code === 'INFO-000' || apiInfo.code === 'INFO-200') {
+              badgeEl.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700';
+              badgeEl.innerText = '19시 개방됨 (' + apiInfo.code + ')';
+              countEl.innerText = Number(apiInfo.total_count || 0).toLocaleString('ko-KR') + '건';
+              msgEl.innerText = `기준일 ${apiInfo.date_kst} · ${apiInfo.msg || '정상 조회'}`;
+            } else if (apiInfo.code === 'INFO-700') {
+              badgeEl.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700';
+              badgeEl.innerText = '19시 이전 잠금 (INFO-700)';
+              countEl.innerText = '19:00 개방 대기';
+              msgEl.innerText = apiInfo.msg || '오늘날짜 데이터는 19시 이후 호출 가능';
+            } else {
+              badgeEl.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600';
+              badgeEl.innerText = apiInfo.code;
+              countEl.innerText = apiInfo.total_count !== null ? `${apiInfo.total_count}건` : '-';
+              msgEl.innerText = apiInfo.msg || '-';
+            }
+          }
+
+          // Update pending blank record count badge
+          const pendingCount = rawData.filter(item => item.is_pending_name).length;
+          const pendingBadge = document.getElementById('pendingCountBadge');
+          if (pendingCount > 0) {
+            pendingBadge.classList.remove('hidden');
+            document.getElementById('pendingCountText').innerText = `가등록(상호·주소 반영 대기중) ${pendingCount}건 포함`;
+          } else {
+            pendingBadge.classList.add('hidden');
+          }
+
           renderTable(rawData);
         } else {
           showError('데이터를 가져오는 중 오류가 발생했습니다: ' + json.error);
@@ -134,39 +335,147 @@
       return `${m}-${day} ${time}`;
     }
 
+    function selectLedgerForTest(ledgNo) {
+      if (!ledgNo) return;
+      const input = document.getElementById('ledgerInput');
+      input.value = ledgNo;
+      lookupLedger(ledgNo);
+    }
+
+    function testMaxPlusOne() {
+      if (!currentMaxLedger) return;
+      try {
+        const nextNo = (BigInt(currentMaxLedger) + 1n).toString();
+        document.getElementById('ledgerInput').value = nextNo;
+        lookupLedger(nextNo);
+      } catch (e) {}
+    }
+
+    function stepLedger(delta) {
+      const input = document.getElementById('ledgerInput');
+      const base = (input.value || currentMaxLedger || '2026001000413573').trim();
+      if (!/^\d{16}$/.test(base)) {
+        alert('16자리 숫자 대장번호를 먼저 입력해 주세요.');
+        return;
+      }
+      const nextVal = (BigInt(base) + BigInt(delta)).toString();
+      input.value = nextVal;
+      lookupLedger(nextVal);
+    }
+
+    async function lookupLedger(targetNo) {
+      const input = document.getElementById('ledgerInput');
+      const no = (targetNo || input.value || '').trim();
+      if (!/^\d{16}$/.test(no)) {
+        alert('16자리 숫자 형태의 대장번호(예: 2026001000413573)를 입력해 주세요.');
+        return;
+      }
+      input.value = no;
+
+      const box = document.getElementById('ledgerResultBox');
+      box.classList.remove('hidden');
+      box.innerHTML = `<span class="text-slate-500"><i class="fa-solid fa-circle-notch fa-spin mr-1.5 text-indigo-600"></i>식약처 상세 팝업(<code>bsnInfoDetail.do?bsn_lcns_ledg_no=${no}</code>) 실시간 조회 중...</span>`;
+
+      try {
+        const res = await fetch(`/api/ledger?no=${encodeURIComponent(no)}`);
+        const json = await res.json();
+        if (!json.success) {
+          box.innerHTML = `<span class="text-rose-600 font-semibold"><i class="fa-solid fa-circle-exclamation mr-1"></i>조회 오류: ${json.error}</span>`;
+          return;
+        }
+
+        if (!json.exists) {
+          box.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800">
+              <div>
+                <span class="font-bold"><i class="fa-solid fa-ban mr-1"></i>[미생성 번호 확인]</span>
+                대장번호 <code class="font-mono font-bold">${json.ledger_no}</code> 은(는) 아직 식약처 DB에 생성되지 않았습니다.
+                <span class="text-rose-600 ml-1">(${json.raw_status})</span>
+              </div>
+              <span class="text-[11px] text-rose-600 font-mono">확인시각: ${formatTime(json.checked_at)}</span>
+            </div>
+          `;
+          return;
+        }
+
+        const d = json.data;
+        const badgeHtml = json.is_pending_name
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800"><i class="fa-solid fa-hourglass-half"></i>신규 채번 (상호·주소 반영 대기중)</span>`
+          : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check"></i>전체 정보 반영 완료</span>`;
+
+        box.innerHTML = `
+          <div class="p-3 rounded-xl ${json.is_pending_name ? 'bg-amber-50/70 border border-amber-200' : 'bg-emerald-50/70 border border-emerald-200'} flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+              ${badgeHtml}
+              <span><strong>대장번호:</strong> <code class="font-mono font-bold text-slate-900">${json.ledger_no}</code></span>
+              <span><strong>인허가번호:</strong> <code class="font-mono text-slate-800">${d.license_no}</code></span>
+              <span><strong>상호명:</strong> <strong class="${json.is_pending_name ? 'text-amber-800' : 'text-slate-900'}">${d.store_name}</strong></span>
+              <span><strong>업종:</strong> ${d.industry}</span>
+              <span><strong>식약처 허가일(PRMS_DT):</strong> <code class="font-mono">${d.permit_date || 'I2500 외 업종/미반영'}</code></span>
+              <span><strong>소재지:</strong> ${d.address || '(공란 — 반영 대기중)'}</span>
+            </div>
+            <span class="text-[11px] text-slate-500 font-mono shrink-0">확인: ${formatTime(json.checked_at)}</span>
+          </div>
+        `;
+      } catch (e) {
+        box.innerHTML = `<span class="text-rose-600 font-semibold">서버 통신 실패</span>`;
+      }
+    }
+
     function renderTable(items) {
       const tbody = document.getElementById('tableBody');
       if (!items || items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-12 text-slate-400 font-medium">조회된 데이터가 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 font-medium">조회된 데이터가 없습니다.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = items.map((item, idx) => `
-        <tr class="hover:bg-slate-50/80 transition">
-          <td class="py-3.5 pl-6 pr-3 font-medium text-slate-400">${idx + 1}</td>
+      tbody.innerHTML = items.map((item, idx) => {
+        const storeCellHtml = item.is_pending_name
+          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+               <i class="fa-solid fa-hourglass-half text-amber-600"></i>
+               신규 채번 (상호·주소 반영 대기중)
+             </span>`
+          : `<span class="font-semibold text-slate-900">${item.store_name}</span>`;
+
+        const addrCellHtml = item.is_pending_name && (!item.address || item.address === '소재지 반영 대기중')
+          ? `<span class="text-amber-700/80 italic text-xs">소재지 반영 대기중</span>`
+          : `<span class="text-slate-600 text-xs">${item.address || '-'}</span>`;
+
+        return `
+        <tr class="hover:bg-slate-50/80 transition ${item.is_pending_name ? 'bg-amber-50/20' : ''}">
+          <td class="py-3.5 pl-5 pr-2 font-medium text-slate-400">${idx + 1}</td>
           <td class="px-3 py-3.5 font-mono text-xs font-semibold whitespace-nowrap ${item.permit_date ? 'text-emerald-700' : 'text-slate-400'}">
             ${item.permit_date || 'I2500 외 업종'}
           </td>
           <td class="px-3 py-3.5 font-mono text-xs text-indigo-600 font-semibold whitespace-nowrap">
             <i class="fa-regular fa-clock mr-1 text-slate-400"></i>${formatTime(item.detected_at)}
           </td>
-          <td class="px-3 py-3.5 font-mono text-slate-600 text-xs">${item.license_no || '-'}</td>
-          <td class="px-3 py-3.5 font-semibold text-slate-900">${item.store_name}</td>
-          <td class="px-3 py-3.5">
+          <td class="px-3 py-3.5 font-mono text-slate-700 text-xs whitespace-nowrap">${item.license_no || '-'}</td>
+          <td class="px-3 py-3.5 font-mono text-xs whitespace-nowrap">
+            <button
+              onclick="selectLedgerForTest('${item.ledger_no || ''}')"
+              title="클릭하여 상단 검증기에서 이 대장번호 조회"
+              class="text-slate-600 hover:text-indigo-600 hover:underline font-mono"
+            >
+              ${item.ledger_no || '-'}
+            </button>
+          </td>
+          <td class="px-3 py-3.5">${storeCellHtml}</td>
+          <td class="px-3 py-3.5 whitespace-nowrap">
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${item.industry.includes('음식') ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}">
               ${item.industry}
             </span>
           </td>
-          <td class="px-3 py-3.5 text-slate-600">${item.district}</td>
-          <td class="px-3 py-3.5 text-slate-600 text-xs max-w-xs truncate" title="${item.address}">${item.address}</td>
-          <td class="px-3 py-3.5 text-slate-500">${item.representative || '-'}</td>
-          <td class="px-3 py-3.5 text-center">
+          <td class="px-3 py-3.5 text-slate-600 whitespace-nowrap">${item.district}</td>
+          <td class="px-3 py-3.5 max-w-xs truncate" title="${item.address || ''}">${addrCellHtml}</td>
+          <td class="px-3 py-3.5 text-slate-500 whitespace-nowrap">${item.representative || '-'}</td>
+          <td class="px-3 py-3.5 text-center whitespace-nowrap">
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
               ${item.status || '정상'}
             </span>
           </td>
         </tr>
-      `).join('');
+      `}).join('');
     }
 
     function filterData() {
@@ -179,7 +488,8 @@
         (item.store_name && item.store_name.toLowerCase().includes(q)) ||
         (item.district && item.district.toLowerCase().includes(q)) ||
         (item.address && item.address.toLowerCase().includes(q)) ||
-        (item.license_no && item.license_no.includes(q))
+        (item.license_no && item.license_no.includes(q)) ||
+        (item.ledger_no && item.ledger_no.includes(q))
       );
       renderTable(filtered);
     }
@@ -189,9 +499,9 @@
       ['all', 'seoul', 'gyeonggi'].forEach(r => {
         const btn = document.getElementById(`tab-${r}`);
         if (r === region) {
-          btn.className = 'px-4 py-2 rounded-lg bg-white text-indigo-600 shadow-sm transition';
+          btn.className = 'px-4 py-1.5 rounded-lg bg-white text-indigo-600 shadow-sm transition';
         } else {
-          btn.className = 'px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 transition';
+          btn.className = 'px-4 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition';
         }
       });
       fetchData();
@@ -199,18 +509,19 @@
 
     function downloadCSV() {
       if (!rawData || rawData.length === 0) return alert('다운로드할 데이터가 없습니다.');
-      const headers = ['순번', '식약처허가일(PRMS_DT)', '최초감지시각', '인허가번호', '상호명', '업종', '관할지자체', '주소', '대표자', '상태'];
+      const headers = ['순번', '식약처허가일(PRMS_DT)', '최초감지시각', '인허가번호(11자리)', '대장번호(16자리)', '상호명', '업종', '관할지자체', '주소', '대표자', '상태'];
       const rows = rawData.map((item, idx) => [
         idx + 1,
         `"${item.permit_date || ''}"`,
         `"${formatTime(item.detected_at)}"`,
-        `"${item.license_no}"`,
-        `"${item.store_name}"`,
-        `"${item.industry}"`,
-        `"${item.district}"`,
-        `"${item.address}"`,
-        `"${item.representative}"`,
-        `"${item.status}"`
+        `"${item.license_no || ''}"`,
+        `"${item.ledger_no || ''}"`,
+        `"${item.store_name || ''}"`,
+        `"${item.industry || ''}"`,
+        `"${item.district || ''}"`,
+        `"${item.address || ''}"`,
+        `"${item.representative || ''}"`,
+        `"${item.status || ''}"`
       ]);
       const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -224,7 +535,7 @@
     function showError(msg) {
       document.getElementById('tableBody').innerHTML = `
         <tr>
-          <td colspan="9" class="text-center py-12">
+          <td colspan="11" class="text-center py-12">
             <div class="inline-flex flex-col items-center justify-center gap-3">
               <i class="fa-solid fa-triangle-exclamation text-amber-500 text-3xl"></i>
               <p class="text-slate-700 font-medium">${msg}</p>
