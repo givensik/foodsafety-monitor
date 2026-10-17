@@ -1,13 +1,16 @@
-// Cloudflare Pages Function: /api/ledger?no=2026001000413418
+// Cloudflare Pages Function: /api/ledger?no=2026001000413418[&view=html]
+// Note: Does NOT store any data (especially phone numbers) in KV or database.
+// When view=html is passed, streams the official Food Safety Korea bsnInfoDetail.do HTML popup directly.
 export async function onRequestGet(context) {
   const { request } = context;
   const reqUrl = new URL(request.url);
   const ledgerNo = (reqUrl.searchParams.get("no") || "").trim();
+  const viewMode = (reqUrl.searchParams.get("view") || "json").toLowerCase();
 
   if (!/^\d{16}$/.test(ledgerNo)) {
     return new Response(JSON.stringify({
       success: false,
-      error: "16자리 숫자 형태의 대장번호(BSN_LCNS_LEDG_NO)를 입력해 주세요. (예: 2026001000413418)"
+      error: "16자리 숫자 형태의 대장번호(BSN_LCNS_LEDG_NO)를 입력해 주세요. (예: 2026001000413573)"
     }), {
       status: 400,
       headers: { "Content-Type": "application/json; charset=UTF-8" }
@@ -41,7 +44,8 @@ export async function onRequestGet(context) {
     }
     const cookieStr = parsedCookies.join("; ");
 
-    const detRes = await fetch(`${DETAIL_URL}?bsnLcnsLedgNo=${ledgerNo}&callPage=${callPage}`, {
+    const targetPopupUrl = `${DETAIL_URL}?bsnLcnsLedgNo=${ledgerNo}&callPage=${callPage}`;
+    const detRes = await fetch(targetPopupUrl, {
       headers: {
         ...commonHeaders,
         "Referer": MAIN_PAGE_URL,
@@ -49,6 +53,56 @@ export async function onRequestGet(context) {
       }
     });
     const detHtml = await detRes.text();
+
+    // Direct HTML viewer mode: stream Food Safety Korea's original popup HTML without storing anything
+    if (viewMode === "html") {
+      if (detHtml.includes("시스템에러가 발생하였습니다") || !detHtml.includes("<th")) {
+        const notFoundHtml = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>미생성 대장번호 (${ledgerNo})</title></head>
+        <body style="font-family:sans-serif;padding:32px;line-height:1.6;">
+          <h2 style="color:#be123c;">[미생성 번호] 대장번호 ${ledgerNo}</h2>
+          <p>식약처 상세원장(<code>bsnInfoDetail.do</code>)에서 <strong>"시스템에러가 발생하였습니다"</strong>를 반환했습니다. 아직 생성되지 않았거나 결번인 번호입니다.</p>
+        </body></html>`;
+        return new Response(notFoundHtml, {
+          headers: {
+            "Content-Type": "text/html; charset=UTF-8",
+            "Cache-Control": "no-store"
+          }
+        });
+      }
+
+      const wrappedHtml = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="https://www.foodsafetykorea.go.kr/">
+  <title>식약처 인허가 상세원장 (${ledgerNo})</title>
+  <style>
+    body { padding: 20px; background: #fff; font-family: 'Malgun Gothic', sans-serif; }
+    .proxy-banner {
+      margin-bottom: 16px; padding: 10px 14px; background: #f8fafc;
+      border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; color: #334155;
+    }
+    .proxy-banner code { font-weight: bold; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <div class="proxy-banner">
+    🔗 <strong>식품안전나라 실시간 원장 뷰어 (무저장 스트리밍)</strong> &middot;
+    원본 경로: <code>https://www.foodsafetykorea.go.kr/potalPopup/fooddanger/bsnInfoDetail.do?bsnLcnsLedgNo=${ledgerNo}</code>
+    (전화번호 등 개인정보는 서버/DB에 저장되지 않고 식약처 원본 화면만 실시간 표시됩니다)
+  </div>
+  ${detHtml}
+</body>
+</html>`;
+
+      return new Response(wrappedHtml, {
+        headers: {
+          "Content-Type": "text/html; charset=UTF-8",
+          "Cache-Control": "no-store"
+        }
+      });
+    }
 
     if (detHtml.includes("시스템에러가 발생하였습니다") || !detHtml.includes("<th")) {
       return new Response(JSON.stringify({
@@ -92,6 +146,8 @@ export async function onRequestGet(context) {
 
     const storeName = fields["업체명"] || "";
     const isPendingName = storeName === "";
+    const rawPhone = fields["전화번호"] || "-";
+    const hasPhone = Boolean(rawPhone && rawPhone !== "-" && rawPhone !== "NULL");
 
     return new Response(JSON.stringify({
       success: true,
@@ -105,7 +161,9 @@ export async function onRequestGet(context) {
         industry: fields["영업 인허가 종류"] || "-",
         license_no: lcnsNo || "-",
         address: fields["소재지"] || "",
-        phone: fields["전화번호"] || "-",
+        has_phone: hasPhone,
+        detail_view_url: `/api/ledger?no=${ledgerNo}&view=html`,
+        openapi_url: lcnsNo ? `http://openapi.foodsafetykorea.go.kr/api/sample/I2500/json/1/5/LCNS_NO=${lcnsNo}` : null,
         sub_type: fields["업태"] || "-",
         permit_date: permitDate
       }
