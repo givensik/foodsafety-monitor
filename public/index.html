@@ -405,7 +405,7 @@
 
         const phoneLinkHtml = `<a href="/api/ledger?no=${encodeURIComponent(json.ledger_no)}&view=html" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold transition shadow-sm">
           <i class="fa-solid fa-arrow-up-right-from-square"></i>
-          <span>식약처 상세원장 (전화번호 ${d.has_phone ? '기재됨' : '확인'}) 열기</span>
+          <span>자세히보기</span>
         </a>`;
 
         box.innerHTML = `
@@ -465,11 +465,11 @@
                  href="/api/ledger?no=${encodeURIComponent(item.ledger_no)}&view=html"
                  target="_blank"
                  rel="noopener noreferrer"
-                 title="식약처 상세원장 팝업(전화번호·업태 등) 무저장 실시간 열기"
-                 class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 text-[11px] font-sans font-semibold transition"
+                 title="식약처 상세 정보 팝업 열기"
+                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 text-[11px] font-sans font-semibold transition"
                >
-                 <i class="fa-solid fa-phone-volume text-[10px]"></i>
-                 <span>원장열기</span>
+                 <i class="fa-solid fa-magnifying-glass-plus text-[10px]"></i>
+                 <span>자세히보기</span>
                </a>
              </div>`
           : '-';

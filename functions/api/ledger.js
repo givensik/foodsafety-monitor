@@ -76,7 +76,7 @@ export async function onRequestGet(context) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <base href="https://www.foodsafetykorea.go.kr/">
-  <title>식약처 인허가 상세원장 (${ledgerNo})</title>
+  <title>식약처 업체 상세정보 자세히보기 (${ledgerNo})</title>
   <style>
     body { padding: 20px; background: #fff; font-family: 'Malgun Gothic', sans-serif; }
     .proxy-banner {
@@ -88,9 +88,8 @@ export async function onRequestGet(context) {
 </head>
 <body>
   <div class="proxy-banner">
-    🔗 <strong>식품안전나라 실시간 원장 뷰어 (무저장 스트리밍)</strong> &middot;
+    🔗 <strong>식품안전나라 업체 상세정보 자세히보기 (무저장 실시간 연동)</strong> &middot;
     원본 경로: <code>https://www.foodsafetykorea.go.kr/potalPopup/fooddanger/bsnInfoDetail.do?bsnLcnsLedgNo=${ledgerNo}</code>
-    (전화번호 등 개인정보는 서버/DB에 저장되지 않고 식약처 원본 화면만 실시간 표시됩니다)
   </div>
   ${detHtml}
 </body>
