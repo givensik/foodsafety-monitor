@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-4">
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl p-6 shadow-sm max-w-4xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <div class="border-b border-[var(--border)] pb-4">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-500 text-xs font-semibold mb-2">
+        <span>🔍 데이터 탐정 퍼즐 맞추기</span>
+      </div>
+      <h2 class="text-xl font-bold tracking-tight">이름 없는 신규 식당, 36시간 먼저 찾아낸 원리</h2>
+      <p class="text-sm text-[var(--muted-foreground)] mt-1">
+        전문 용어 없이, 4단계 퍼즐 소거법과 시간차 데이터로 빈칸을 맞춘 전체 흐름입니다.
+      </p>
+    </div>
+
+    <!-- 4-Step Process Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      
+      <!-- Step 1 -->
+      <div class="bg-[var(--background)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-red-400"></div>
+        <div>
+          <span class="text-xs font-bold text-red-500 uppercase tracking-wider">Step 1 (금요일 밤)</span>
+          <h3 class="font-semibold text-base mt-1 flex items-center gap-1.5">
+            <span>❓ 이름 없는 빈칸</span>
+          </h3>
+          <p class="text-xs text-[var(--muted-foreground)] mt-2 leading-relaxed">
+            식약처 전국 전산망에 등록 번호는 떴는데, <strong>가게 이름과 주소가 텅 빈칸("")</strong>으로 표시됨.
+          </p>
+        </div>
+        <div class="mt-4 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-xs font-mono text-red-400">
+          가게명: <span class="bg-red-500/20 px-1 py-0.5 rounded text-red-300">공란 ("")</span><br>
+          주소지: <span class="bg-red-500/20 px-1 py-0.5 rounded text-red-300">미공개</span>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="bg-[var(--background)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-amber-400"></div>
+        <div>
+          <span class="text-xs font-bold text-amber-500 uppercase tracking-wider">Step 2 (토요일 낮)</span>
+          <h3 class="font-semibold text-base mt-1 flex items-center gap-1.5">
+            <span>🔎 숨은 쪽지 발견</span>
+          </h3>
+          <p class="text-xs text-[var(--muted-foreground)] mt-2 leading-relaxed">
+            화면 뒷단 전산을 뜯어보니 이름은 없지만 <strong>음식 종류, 사장님 전화 뒷자리, 접수 순번</strong>이 적혀 있음!
+          </p>
+        </div>
+        <div class="mt-4 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-500 space-y-1">
+          <div>• 음식분류: <b>기타 / 한식</b></div>
+          <div>• 전화뒷자리: <b>8379, 9965</b></div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="bg-[var(--background)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-blue-400"></div>
+        <div>
+          <span class="text-xs font-bold text-blue-500 uppercase tracking-wider">Step 3 (토요일 밤)</span>
+          <h3 class="font-semibold text-base mt-1 flex items-center gap-1.5">
+            <span>⚡ 구청 명단 먼저 확보</span>
+          </h3>
+          <p class="text-xs text-[var(--muted-foreground)] mt-2 leading-relaxed">
+            식약처는 주말에 쉬지만, <strong>서울시 구청 전산은 토요일 밤에 먼저 열려</strong> 당일 승인된 진짜 이름들이 쏟아져 나옴.
+          </p>
+        </div>
+        <div class="mt-4 bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5 text-xs text-blue-400 font-semibold text-center">
+          식약처보다 36시간 먼저<br>구청 원본 명단 확보!
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="bg-[var(--background)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-emerald-400"></div>
+        <div>
+          <span class="text-xs font-bold text-emerald-500 uppercase tracking-wider">Step 4 (월요일 아침)</span>
+          <h3 class="font-semibold text-base mt-1 flex items-center gap-1.5">
+            <span>🎯 100% 일치 검증</span>
+          </h3>
+          <p class="text-xs text-[var(--muted-foreground)] mt-2 leading-relaxed">
+            월요일 출근 시간, 식약처가 36시간 만에 빈칸을 채웠을 때 <strong>우리가 미리 맞춰둔 4개 가게와 100% 일치!</strong>
+          </p>
+        </div>
+        <div class="mt-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 text-xs text-emerald-500 font-bold text-center">
+          4개 타깃 전수 적중<br>(4전 4승 100%)
+        </div>
+      </div>
+
+    </div>
+
+    <!-- The 4 Stores Puzzle Breakdown -->
+    <div class="border-t border-[var(--border)] pt-5">
+      <h3 class="font-semibold text-base mb-3 flex items-center gap-2">
+        <span>🧩 4개 매장은 어떻게 1:1로 맞췄을까? (소거법 퍼즐 맞추기)</span>
+      </h3>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        
+        <!-- Jongno -->
+        <div class="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-blue-400">1. 종로구 매장</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 font-semibold">100% 일치</span>
+          </div>
+          <div class="text-xs space-y-1 text-[var(--muted-foreground)]">
+            <div>• <b>숨은 쪽지</b>: 음식 종류가 <b>'기타 (카페/음료)'</b>로 적혀 있음.</div>
+            <div>• <b>구청 후보 2곳</b>: A는 화덕피자집(경양식), B는 베트남 커피(원플러스).</div>
+            <div>• <b>결과</b>: 피자집 탈락! ➔ <b>원플러스 (종로5가) 단독 확정!</b></div>
+          </div>
+        </div>
+
+        <!-- Gangbuk -->
+        <div class="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-blue-400">2. 강북구 매장</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 font-semibold">100% 일치</span>
+          </div>
+          <div class="text-xs space-y-1 text-[var(--muted-foreground)]">
+            <div>• <b>숨은 쪽지</b>: 음식 종류 <b>'한식'</b> + 금요일 퇴근 직전(17:54) 접수.</div>
+            <div>• <b>구청 후보 7곳</b>: 찻집, 술집 등 4곳 탈락. 한식 3곳 중 퇴근 직전 접수된 곳 비교.</div>
+            <div>• <b>결과</b>: 17시 54분에 승인된 ➔ <b>오미가 (수유동) 단독 확정!</b></div>
+          </div>
+        </div>
+
+        <!-- Gangnam -->
+        <div class="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-blue-400">3. 강남구 매장</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 font-semibold">100% 일치</span>
+          </div>
+          <div class="text-xs space-y-1 text-[var(--muted-foreground)]">
+            <div>• <b>숨은 쪽지</b>: 사장님 성함이 <b>'소*범'</b>으로 마스킹됨.</div>
+            <div>• <b>사업자망 조회</b>: 서울 전체 등록 사업자 중 '소*범' 전수 검색.</div>
+            <div>• <b>결과</b>: '소준범' 대표의 ➔ <b>딩딤키친 (신사동) 1분 만에 확정!</b></div>
+          </div>
+        </div>
+
+        <!-- Gangseo -->
+        <div class="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-blue-400">4. 강서구 매장</span>
+            <span class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 font-semibold">100% 일치</span>
+          </div>
+          <div class="text-xs space-y-1 text-[var(--muted-foreground)]">
+            <div>• <b>숨은 쪽지</b>: 마트 반찬 코너 + 금요일 퇴근 직전 접수.</div>
+            <div>• <b>구청 후보 4곳</b>: 당일 구청에서 가장 마지막(17:50)에 승인 도장 찍힌 매장.</div>
+            <div>• <b>결과</b>: NC백화점 지하 ➔ <b>마켓상점 (등촌동) 단독 확정!</b></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
