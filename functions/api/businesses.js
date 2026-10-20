@@ -1,4 +1,149 @@
 // Cloudflare Pages Function: /api/businesses
+
+const SEOUL_DISTRICT_MAP = {
+  "종로구": "JN", "중구": "JG", "용산구": "YS", "성동구": "SD", "광진구": "GJ",
+  "동대문구": "DDM", "중랑구": "JR", "성북구": "SB", "강북구": "GB", "도봉구": "DB",
+  "노원구": "NW", "은평구": "EP", "서대문구": "SDM", "마포구": "MP", "양천구": "YC",
+  "강서구": "GS", "구로구": "GR", "금천구": "GC", "영등포구": "YDP", "동작구": "DJ",
+  "관악구": "GA", "서초구": "SC", "강남구": "GN", "송파구": "SP", "강동구": "GD"
+};
+
+function getSeoulDistrictCode(districtStr) {
+  if (!districtStr) return null;
+  for (const [name, code] of Object.entries(SEOUL_DISTRICT_MAP)) {
+    if (districtStr.includes(name)) return code;
+  }
+  return null;
+}
+
+function getSeoulServiceCode(industry, districtCode) {
+  let prefix = "LOCALDATA_072404";
+  if (!industry) return `${prefix}_${districtCode}`;
+  if (industry.includes("일반음식")) prefix = "LOCALDATA_072404";
+  else if (industry.includes("휴게음식")) prefix = "LOCALDATA_072405";
+  else if (industry.includes("제과점")) prefix = "LOCALDATA_072218";
+  else if (industry.includes("즉석판매")) prefix = "LOCALDATA_072219";
+  else if (industry.includes("유통전문")) prefix = "LOCALDATA_072217";
+  return `${prefix}_${districtCode}`;
+}
+
+async function resolveSeoulStore({ env, context, district, industry, permitDate, subType, representative, licenseNo }) {
+  const distCode = getSeoulDistrictCode(district);
+  if (!distCode) return null;
+
+  const serviceCode = getSeoulServiceCode(industry || "", distCode);
+  const seoulApiKey = (env && env.SEOUL_API_KEY) || "494d5376656b6a733239467379686f";
+  const cacheKey = `seoul_match:${licenseNo || serviceCode + (permitDate || "")}`;
+
+  if (env && env.DETECTED_STORES) {
+    try {
+      const cached = await env.DETECTED_STORES.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const apiUrl = `http://openapi.seoul.go.kr:8088/${seoulApiKey}/json/${serviceCode}/1/1000/`;
+    const res = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    let rows = json?.[serviceCode]?.row || [];
+
+    // Fallback for distribution industry (072217) if rows empty
+    if (rows.length === 0 && serviceCode.includes("072217")) {
+      try {
+        const c2 = new AbortController();
+        const t2 = setTimeout(() => c2.abort(), 3000);
+        const res2 = await fetch(`http://openapi.seoul.go.kr:8088/${seoulApiKey}/json/${serviceCode}/1001/2000/`, { signal: c2.signal });
+        clearTimeout(t2);
+        if (res2.ok) {
+          const json2 = await res2.json();
+          rows = json2?.[serviceCode]?.row || [];
+        }
+      } catch (e2) {}
+    }
+
+    if (!rows.length) return null;
+
+    let candidates = [];
+    if (permitDate) {
+      candidates = rows.filter(r => {
+        const prms = (r.APVPERMYMD || r.LCPMT_YMD || "").trim();
+        return prms.includes(permitDate);
+      });
+    }
+
+    if (candidates.length === 0) {
+      candidates = rows.slice(0, 50);
+    }
+
+    let confidence = "70% (당일 인허가 등록)";
+
+    if (subType) {
+      const subTypeMatches = candidates.filter(r => {
+        const u = (r.UPTAENM || r.BZSTAT_SE_NM || r.SNTUPTAENM || "").trim();
+        return u.includes(subType) || subType.includes(u);
+      });
+      if (subTypeMatches.length > 0) {
+        candidates = subTypeMatches;
+        confidence = `95% (업태 '${subType}' 일치)`;
+      }
+    }
+
+    if (representative && representative.includes("*")) {
+      const firstChar = representative[0];
+      const lastChar = representative[representative.length - 1];
+      const repMatches = candidates.filter(r => {
+        const repName = (r.PRSDNT_NM || r.RPRSN_NM || "").trim();
+        if (!repName) return false;
+        return repName.startsWith(firstChar) && repName.endsWith(lastChar);
+      });
+      if (repMatches.length > 0) {
+        candidates = repMatches;
+        confidence = `99% (대표자 '${representative}' 1:1 일치)`;
+      }
+    }
+
+    candidates.sort((a, b) => {
+      const timeA = (a.LASTMODTS || a.LAST_MDFCN_YMD || a.UPDATEDT || "").trim();
+      const timeB = (b.LASTMODTS || b.LAST_MDFCN_YMD || b.UPDATEDT || "").trim();
+      return timeB.localeCompare(timeA);
+    });
+
+    const matched = candidates[0];
+    if (!matched) return null;
+
+    const storeName = (matched.BPLCNM || matched.BPLC_NM || "").trim();
+    const address = (matched.RDNWHLADDR || matched.ROAD_NM_ADDR || matched.SITEWHLADDR || matched.LOTNO_ADDR || "").trim();
+    if (!storeName) return null;
+
+    const result = {
+      store_name: storeName,
+      address: address,
+      uptae: (matched.UPTAENM || matched.BZSTAT_SE_NM || "").trim(),
+      mgt_no: (matched.MGTNO || matched.MNG_NO || "").trim(),
+      tel: (matched.SITETEL || matched.TELNO || "").trim(),
+      last_modified: (matched.LASTMODTS || matched.LAST_MDFCN_YMD || "").trim(),
+      confidence: confidence,
+      source: "서울시 새올 행정망 (LOCALDATA)"
+    };
+
+    if (env && env.DETECTED_STORES && licenseNo) {
+      const putPromise = env.DETECTED_STORES.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 * 7 });
+      if (context && context.waitUntil) context.waitUntil(putPromise);
+      else await putPromise;
+    }
+
+    return result;
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
   const reqUrl = new URL(request.url);
@@ -187,6 +332,9 @@ export async function onRequestGet(context) {
         const lcnsNo = item.LCNS_NO || "";
         let storeName = (item.BSSH_NM && item.BSSH_NM !== "NULL") ? item.BSSH_NM.trim() : "";
         let address = (item.SITE_ADDR && item.SITE_ADDR !== "NULL") ? item.SITE_ADDR.trim() : "";
+        let subType = "";
+        let popupPermitDate = null;
+        let popupRepresentative = "";
 
         if (!storeName && ledgNo) {
           try {
@@ -202,16 +350,24 @@ export async function onRequestGet(context) {
             });
             clearTimeout(timeoutId);
             const detHtml = await detRes.text();
-            const nameMatch = detHtml.match(/<th[^>]*>\s*업체명\s*<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/i);
-            if (nameMatch) {
-              const parsedName = nameMatch[1].replace(/<[^>]+>/g, "").trim();
-              if (parsedName) storeName = parsedName;
+
+            const pairRegex = /<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/gi;
+            let m;
+            const detFields = {};
+            while ((m = pairRegex.exec(detHtml)) !== null) {
+              const k = m[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+              const v = m[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+              if (k && !(k in detFields)) detFields[k] = v;
             }
-            if (!address) {
-              const addrMatch = detHtml.match(/<th[^>]*>\s*소재지\s*<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/i);
-              if (addrMatch) {
-                const parsedAddr = addrMatch[1].replace(/<[^>]+>/g, "").trim();
-                if (parsedAddr) address = parsedAddr;
+
+            if (detFields["업체명"]) storeName = detFields["업체명"];
+            if (!address && detFields["소재지"]) address = detFields["소재지"];
+            if (detFields["업태"]) subType = detFields["업태"];
+            if (detFields["대표자"]) popupRepresentative = detFields["대표자"];
+            if (detFields["인허가일자"]) {
+              const rawP = detFields["인허가일자"].replace(/[^0-9]/g, "");
+              if (rawP.length === 8) {
+                popupPermitDate = `${rawP.slice(0, 4)}-${rawP.slice(4, 6)}-${rawP.slice(6, 8)}`;
               }
             }
           } catch (e) {
@@ -220,7 +376,7 @@ export async function onRequestGet(context) {
         }
 
         // Fetch or resolve real permit date (PRMS_DT) from OpenAPI I2500 + KV cache
-        let permitDate = VERIFIED_PRMS_DT[lcnsNo] || null;
+        let permitDate = VERIFIED_PRMS_DT[lcnsNo] || popupPermitDate || null;
         if (!permitDate && lcnsNo) {
           if (env && env.DETECTED_STORES) {
             try {
@@ -256,6 +412,23 @@ export async function onRequestGet(context) {
           }
         }
 
+        // Auto cross-reference Seoul Open Data (새올) if storeName is pending
+        let resolvedCandidate = null;
+        if (!storeName && getSeoulDistrictCode(item.INSTT_CD_NM)) {
+          try {
+            resolvedCandidate = await resolveSeoulStore({
+              env,
+              context,
+              district: item.INSTT_CD_NM,
+              industry: item.INDUTY_CD_NM || "기타",
+              permitDate: permitDate,
+              subType: subType,
+              representative: item.PRSDNT_NM || popupRepresentative || "",
+              licenseNo: lcnsNo
+            });
+          } catch (e) {}
+        }
+
         let detectedAt = null;
         if (env && env.DETECTED_STORES && ledgNo) {
           try {
@@ -276,15 +449,19 @@ export async function onRequestGet(context) {
         }
 
         const isPendingName = !storeName;
+        const displayStoreName = storeName || (resolvedCandidate ? `신규 채번 (${resolvedCandidate.store_name} 매칭됨)` : "신규 채번 (상호·주소 반영 대기중)");
+        const displayAddress = address || (resolvedCandidate ? `${resolvedCandidate.address} (새올 행정망)` : (isPendingName ? "소재지 반영 대기중" : ""));
 
         return {
           license_no: lcnsNo,
-          store_name: storeName || "신규 채번 (상호·주소 반영 대기중)",
+          store_name: displayStoreName,
+          raw_store_name: storeName,
           is_pending_name: isPendingName,
+          resolved_candidate: resolvedCandidate,
           industry: item.INDUTY_CD_NM || "기타",
           district: item.INSTT_CD_NM || "",
-          address: address || (isPendingName ? "소재지 반영 대기중" : ""),
-          representative: item.PRSDNT_NM || "",
+          address: displayAddress,
+          representative: item.PRSDNT_NM || popupRepresentative || "",
           status: item.CLSBIZ_DVS_CD_NM || "정상",
           ledger_no: ledgNo,
           permit_date: permitDate,

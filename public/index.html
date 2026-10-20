@@ -307,10 +307,17 @@
 
           // Update pending blank record count badge
           const pendingCount = rawData.filter(item => item.is_pending_name).length;
+          const resolvedCount = rawData.filter(item => item.resolved_candidate).length;
           const pendingBadge = document.getElementById('pendingCountBadge');
           if (pendingCount > 0) {
             pendingBadge.classList.remove('hidden');
-            document.getElementById('pendingCountText').innerText = `가등록(상호·주소 반영 대기중) ${pendingCount}건 포함`;
+            if (resolvedCount > 0) {
+              pendingBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-sm';
+              document.getElementById('pendingCountText').innerHTML = `<strong>공란 ${pendingCount}건 감지</strong> &middot; 서울시 새올 행정망 ${resolvedCount}건 즉시 자동 매칭`;
+            } else {
+              pendingBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200';
+              document.getElementById('pendingCountText').innerText = `가등록(상호·주소 반영 대기중) ${pendingCount}건 포함`;
+            }
           } else {
             pendingBadge.classList.add('hidden');
           }
@@ -399,9 +406,15 @@
         }
 
         const d = json.data;
-        const badgeHtml = json.is_pending_name
-          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800"><i class="fa-solid fa-hourglass-half"></i>신규 채번 (상호·주소 반영 대기중)</span>`
-          : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check"></i>전체 정보 반영 완료</span>`;
+        const cand = json.resolved_candidate || d?.resolved_candidate;
+        let badgeHtml;
+        if (cand) {
+          badgeHtml = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"><i class="fa-solid fa-bolt text-emerald-600"></i>새올 즉시 매칭 (${cand.confidence})</span>`;
+        } else if (json.is_pending_name) {
+          badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800"><i class="fa-solid fa-hourglass-half"></i>신규 채번 (상호·주소 반영 대기중)</span>`;
+        } else {
+          badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check"></i>전체 정보 반영 완료</span>`;
+        }
 
         const phoneLinkHtml = `<a href="/api/ledger?no=${encodeURIComponent(json.ledger_no)}&view=html" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold transition shadow-sm">
           <i class="fa-solid fa-arrow-up-right-from-square"></i>
@@ -409,12 +422,12 @@
         </a>`;
 
         box.innerHTML = `
-          <div class="p-3 rounded-xl ${json.is_pending_name ? 'bg-amber-50/70 border border-amber-200' : 'bg-emerald-50/70 border border-emerald-200'} flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div class="p-3 rounded-xl ${cand ? 'bg-emerald-50/80 border border-emerald-300' : (json.is_pending_name ? 'bg-amber-50/70 border border-amber-200' : 'bg-emerald-50/70 border border-emerald-200')} flex flex-col md:flex-row md:items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               ${badgeHtml}
               <span><strong>대장번호:</strong> <code class="font-mono font-bold text-slate-900">${json.ledger_no}</code></span>
               <span><strong>인허가번호:</strong> <code class="font-mono text-slate-800">${d.license_no}</code></span>
-              <span><strong>상호명:</strong> <strong class="${json.is_pending_name ? 'text-amber-800' : 'text-slate-900'}">${d.store_name}</strong></span>
+              <span><strong>상호명:</strong> <strong class="${cand ? 'text-emerald-900 font-bold' : (json.is_pending_name ? 'text-amber-800' : 'text-slate-900')}">${d.store_name}</strong></span>
               <span><strong>업종:</strong> ${d.industry}</span>
               <span><strong>식약처 허가일(PRMS_DT):</strong> <code class="font-mono">${d.permit_date || 'I2500 외 업종/미반영'}</code></span>
               <span><strong>소재지:</strong> ${d.address || '(공란 — 반영 대기중)'}</span>
@@ -436,16 +449,43 @@
       }
 
       tbody.innerHTML = items.map((item, idx) => {
-        const storeCellHtml = item.is_pending_name
-          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-               <i class="fa-solid fa-hourglass-half text-amber-600"></i>
-               신규 채번 (상호·주소 반영 대기중)
-             </span>`
-          : `<span class="font-semibold text-slate-900">${item.store_name}</span>`;
+        let storeCellHtml;
+        if (item.resolved_candidate) {
+          storeCellHtml = `
+            <div class="flex flex-col gap-1 items-start">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-950 border border-emerald-300 shadow-sm">
+                <i class="fa-solid fa-bolt text-emerald-600"></i>
+                ${item.resolved_candidate.store_name}
+              </span>
+              <span class="text-[10px] text-emerald-700 font-semibold bg-emerald-100/70 px-1.5 py-0.5 rounded">
+                새올 자동 매칭: ${item.resolved_candidate.confidence}
+              </span>
+            </div>
+          `;
+        } else if (item.is_pending_name) {
+          storeCellHtml = `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+              <i class="fa-solid fa-hourglass-half text-amber-600"></i>
+              신규 채번 (상호·주소 반영 대기중)
+            </span>
+          `;
+        } else {
+          storeCellHtml = `<span class="font-semibold text-slate-900">${item.store_name}</span>`;
+        }
 
-        const addrCellHtml = item.is_pending_name && (!item.address || item.address === '소재지 반영 대기중')
-          ? `<span class="text-amber-700/80 italic text-xs">소재지 반영 대기중</span>`
-          : `<span class="text-slate-600 text-xs">${item.address || '-'}</span>`;
+        let addrCellHtml;
+        if (item.resolved_candidate) {
+          addrCellHtml = `
+            <div class="flex flex-col gap-0.5">
+              <span class="text-slate-800 font-medium text-xs">${item.resolved_candidate.address}</span>
+              <span class="text-[10px] text-emerald-700 font-mono">새올행정시스템 원천주소</span>
+            </div>
+          `;
+        } else if (item.is_pending_name && (!item.address || item.address === '소재지 반영 대기중')) {
+          addrCellHtml = `<span class="text-amber-700/80 italic text-xs">소재지 반영 대기중</span>`;
+        } else {
+          addrCellHtml = `<span class="text-slate-600 text-xs">${item.address || '-'}</span>`;
+        }
 
         const lcnsCellHtml = item.license_no
           ? `<a href="http://openapi.foodsafetykorea.go.kr/api/sample/I2500/json/1/5/LCNS_NO=${encodeURIComponent(item.license_no)}" target="_blank" rel="noopener noreferrer" title="식약처 OpenAPI(I2500) 원문 JSON 열기" class="text-slate-700 hover:text-indigo-600 hover:underline font-mono inline-flex items-center gap-1">
@@ -475,7 +515,7 @@
           : '-';
 
         return `
-        <tr class="hover:bg-slate-50/80 transition ${item.is_pending_name ? 'bg-amber-50/20' : ''}">
+        <tr class="hover:bg-slate-50/80 transition ${item.resolved_candidate ? 'bg-emerald-50/20' : (item.is_pending_name ? 'bg-amber-50/20' : '')}">
           <td class="py-3.5 pl-5 pr-2 font-medium text-slate-400">${idx + 1}</td>
           <td class="px-3 py-3.5 font-mono text-xs font-semibold whitespace-nowrap ${item.permit_date ? 'text-emerald-700' : 'text-slate-400'}">
             ${item.permit_date || 'I2500 외 업종'}

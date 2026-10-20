@@ -5,3 +5,6 @@ pages_build_output_dir = "public"
 [[kv_namespaces]]
 binding = "DETECTED_STORES"
 id = "6c55919c3d3c423d9d9f98013cdfe631"
+
+[vars]
+SEOUL_API_KEY = "494d5376656b6a733239467379686f"
