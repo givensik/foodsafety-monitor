@@ -2,3 +2,8 @@ node_modules/
 .wrangler/
 .dev.vars
 .DS_Store
+
+# 브라우저 자동화용 크롬 프로필 (쿠키·로그인 세션 포함 가능 → 커밋 금지)
+naver_map_profile/
+**/naver_map_profile/
+baemin/
