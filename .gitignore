@@ -13,3 +13,5 @@ naver_map_saver_done.csv
 naver_map_saver_failed.csv
 __pycache__/
 *.pyc
+.naver_map_saver_installed
+naver_map_debug/

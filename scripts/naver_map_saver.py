@@ -207,7 +207,39 @@ def ask_list_name(page):
     return ans
 
 
-def manual(msg):
+DEBUG_DIR = Path("naver_map_debug")
+
+
+def dump_debug(page, step):
+    """막힌 순간의 화면 캡처 + frame 별 보이는 버튼/입력칸 목록을 naver_map_debug/ 에 저장.
+    이 폴더를 그대로 전달하면 SELECTORS 를 실제 화면에 맞게 고칠 수 있다."""
+    try:
+        DEBUG_DIR.mkdir(exist_ok=True)
+        stamp = time.strftime("%H%M%S")
+        page.screenshot(path=str(DEBUG_DIR / f"{stamp}_{step}.png"), full_page=True)
+        lines = [f"URL: {page.url}", f"단계: {step}", ""]
+        for fr in all_frames(page):
+            lines.append(f"## frame name='{fr.name}' url={fr.url}")
+            try:
+                info = fr.evaluate("""() => [...document.querySelectorAll(
+                    'button, a[role=button], [role=button], [role=checkbox], input, textarea')]
+                  .filter(e => e.offsetParent !== null)
+                  .slice(0, 150)
+                  .map(e => [e.tagName, e.getAttribute('role') || '', (e.innerText || '').trim().slice(0, 30),
+                             e.getAttribute('aria-label') || '', e.getAttribute('placeholder') || '',
+                             e.className && e.className.toString ? e.className.toString().slice(0, 40) : ''].join(' | '))""")
+                lines += ["  " + x for x in info]
+            except Exception as e:
+                lines.append(f"  (읽기 실패: {e})")
+        (DEBUG_DIR / f"{stamp}_{step}.txt").write_text("\n".join(lines), encoding="utf-8")
+        print(f"  [디버그] {DEBUG_DIR}/{stamp}_{step}.png / .txt 저장")
+    except Exception as e:
+        print(f"  [디버그 저장 실패] {e}")
+
+
+def manual(msg, page=None, step="manual"):
+    if page is not None:
+        dump_debug(page, step)
     input(f"  [수동 처리 필요] {msg} — 브라우저에서 직접 처리한 뒤 Enter (건너뛰려면 Enter 후 다음 행) ")
 
 
@@ -237,8 +269,9 @@ def save_one(page, base_url, query, memo, list_name, auto_only):
 
     if not click_text_button(page, SELECTORS["save_button_texts"]):
         if auto_only:
+            dump_debug(page, "save_button")
             return "fail:save_button", list_name
-        manual("[저장] 버튼을 찾지 못함. 검색 결과에서 직접 [저장] 클릭")
+        manual("[저장] 버튼을 찾지 못함. 검색 결과에서 직접 [저장] 클릭", page, "save_button")
     time.sleep(1.2)
 
     if list_name is None:
@@ -248,21 +281,24 @@ def save_one(page, base_url, query, memo, list_name, auto_only):
     dialog_frame = check_list(page, list_name)
     if dialog_frame is None:
         if auto_only:
+            dump_debug(page, "list")
             return "fail:list", list_name
-        manual(f"리스트 '{list_name}' 체크 실패. 직접 체크")
+        manual(f"리스트 '{list_name}' 체크 실패. 직접 체크", page, "list")
 
     memo_el = find_memo_input(page)
     if memo_el:
         memo_el.fill(memo)
     elif memo:
         if auto_only:
+            dump_debug(page, "memo")
             return "fail:memo", list_name
-        manual(f"메모 칸을 찾지 못함. 직접 입력: {memo}")
+        manual(f"메모 칸을 찾지 못함. 직접 입력: {memo}", page, "memo")
 
     if not click_confirm(page, dialog_frame):
         if auto_only:
+            dump_debug(page, "confirm")
             return "fail:confirm", list_name
-        manual("최종 [저장] 버튼 클릭")
+        manual("최종 [저장] 버튼 클릭", page, "confirm")
     time.sleep(1.0)
     return "ok", list_name
 

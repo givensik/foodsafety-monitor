@@ -87,6 +87,23 @@ saved3 = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/saved").rea
 check("--list 맛집: 질문 없음", "저장할 리스트" not in r3.stdout)
 check("--list 맛집: 1건 저장, 리스트 맛집", len(saved3) == 5 and saved3[-1]["lists"] == ["맛집"], saved3[-1:])
 
+# 6) [저장] 버튼이 없는 화면 → 실패 기록 + 디버그(캡처/버튼목록) 저장
+xlsx2 = work / "실패케이스.xlsx"
+wb2 = Workbook(); ws2 = wb2.active
+ws2.append(["상호명", "주소"]); ws2.append(["없는집", "NOSAVE 테스트동 1번지 2층"])
+wb2.save(xlsx2)
+cmd2 = [c if c != str(xlsx) else str(xlsx2) for c in cmd]
+r4 = subprocess.run(cmd2 + ["--list", "맛집"], input="\n", text=True, capture_output=True, cwd=work, timeout=300)
+saved4 = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/saved").read())
+dbg = list((work / "naver_map_debug").glob("*_save_button.*")) if (work / "naver_map_debug").exists() else []
+check("버튼 없음 → fail:save_button 출력", "fail:save_button" in r4.stdout, r4.stdout[-300:])
+check("버튼 없음 → 저장 안 됨", len(saved4) == len(saved3))
+check("버튼 없음 → 실패 기록 파일", (work / "naver_map_saver_failed.csv").exists())
+check("디버그 캡처(.png)+버튼목록(.txt) 저장", {x.suffix for x in dbg} == {".png", ".txt"}, dbg)
+if dbg:
+    txt = [x for x in dbg if x.suffix == ".txt"][0].read_text(encoding="utf-8")
+    check("버튼목록에 frame 정보 포함", "## frame" in txt, txt[:200])
+
 srv.shutdown(); shutil.rmtree(work, ignore_errors=True)
 print(f"\n=== QA 결과: 실패 {fails}건 ===")
 sys.exit(1 if fails else 0)

@@ -46,7 +46,11 @@ class H(BaseHTTPRequestHandler):
             boxes = "".join(f'<div role=checkbox aria-checked=false aria-label="{n}">{n}</div>' for n in LISTS)
             self.send(MAIN % (urllib.parse.quote(q), boxes, json.dumps(q)))
         elif u.path == "/frame":
-            self.send(FRAME % urllib.parse.parse_qs(u.query).get("q", [""])[0])
+            q = urllib.parse.parse_qs(u.query).get("q", [""])[0]
+            if "NOSAVE" in q:  # [저장] 버튼이 없는 화면 (실패/디버그 저장 경로 검증용)
+                self.send(f"<!doctype html><meta charset=utf-8><body>검색결과 없음: {q}</body>")
+            else:
+                self.send(FRAME % q)
         elif u.path == "/saved":
             self.send(json.dumps(SAVED, ensure_ascii=False), "application/json")
         else:
