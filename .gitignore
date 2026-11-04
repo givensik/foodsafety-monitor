@@ -11,3 +11,5 @@ baemin/
 # naver_map_saver.py 실행 기록
 naver_map_saver_done.csv
 naver_map_saver_failed.csv
+__pycache__/
+*.pyc
