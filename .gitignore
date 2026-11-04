@@ -7,3 +7,7 @@ node_modules/
 naver_map_profile/
 **/naver_map_profile/
 baemin/
+
+# naver_map_saver.py 실행 기록
+naver_map_saver_done.csv
+naver_map_saver_failed.csv
