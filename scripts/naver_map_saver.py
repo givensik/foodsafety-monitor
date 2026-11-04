@@ -11,7 +11,7 @@
   3. 저장 창에서 리스트(체크리스트) 체크
        - 첫 행에서만 "어느 리스트에 넣을지" 번호로 물어봄
        - 이후 행은 같은 리스트에 자동으로 체크
-  4. 메모 칸에 "상세주소 | 상호명" 입력 후 [저장]
+  4. 메모 칸에 "상호명 | 상세주소" 입력 후 [저장]
 
 사용법
   pip install playwright openpyxl
@@ -66,7 +66,7 @@ def split_address(addr: str):
 
 
 def build_memo(detail: str, name: str) -> str:
-    parts = [p for p in (detail.strip(), (name or "").strip()) if p]
+    parts = [p for p in ((name or "").strip(), detail.strip()) if p]
     return " | ".join(parts)
 
 
@@ -166,35 +166,35 @@ def visible_list_names(page):
                         # input[type=checkbox] 인 경우 부모 label 텍스트
                         label = el.locator("xpath=ancestor::label[1]").inner_text().strip() if el.locator("xpath=ancestor::label[1]").count() else ""
                     if label:
-                        names.append((label.splitlines()[0].strip(), el))
+                        names.append((label.splitlines()[0].strip(), el, fr))
             except Exception:
                 pass
     return names
 
 
 def check_list(page, list_name):
-    for label, el in visible_list_names(page):
+    for label, el, fr in visible_list_names(page):
         if label == list_name or label.startswith(list_name):
             checked = el.get_attribute("aria-checked") == "true" or (el.evaluate("e => e.checked === true"))
             if not checked:
                 el.click()
-            return True
+            return fr
     # 폴백: 텍스트로 직접 클릭
     for fr in all_frames(page):
         loc = fr.get_by_text(list_name, exact=True)
         try:
             if loc.count() and loc.first.is_visible():
                 loc.first.click()
-                return True
+                return fr
         except Exception:
             pass
-    return False
+    return None
 
 
 def ask_list_name(page):
     items = visible_list_names(page)
     seen, uniq = set(), []
-    for label, _ in items:
+    for label, _, _ in items:
         if label not in seen:
             seen.add(label)
             uniq.append(label)
@@ -211,8 +211,28 @@ def manual(msg):
     input(f"  [수동 처리 필요] {msg} — 브라우저에서 직접 처리한 뒤 Enter (건너뛰려면 Enter 후 다음 행) ")
 
 
-def save_one(page, query, memo, list_name, auto_only):
-    page.goto("https://map.naver.com/p/search/" + urllib.parse.quote(query), wait_until="domcontentloaded")
+def click_confirm(page, dialog_frame):
+    """저장 창 안의 최종 확인 버튼 클릭.
+    검색 패널의 [저장] 버튼과 문구가 같을 수 있으므로, 리스트 체크박스가 있던 frame 안에서
+    role=dialog 내부 버튼을 우선 찾고, 없으면 그 frame 의 마지막으로 보이는 버튼을 누른다."""
+    frames = [dialog_frame] if dialog_frame else []
+    frames += [f for f in all_frames(page) if f not in frames]
+    for fr in frames:
+        for scope in (fr.locator("[role='dialog']"), fr.locator("body")):
+            for t in SELECTORS["confirm_button_texts"]:
+                loc = scope.get_by_role("button", name=re.compile(rf"^\s*{re.escape(t)}\s*$"))
+                try:
+                    vis = [loc.nth(i) for i in range(loc.count()) if loc.nth(i).is_visible()]
+                    if vis:
+                        vis[-1].click()
+                        return True
+                except Exception:
+                    pass
+    return False
+
+
+def save_one(page, base_url, query, memo, list_name, auto_only):
+    page.goto(base_url + urllib.parse.quote(query), wait_until="domcontentloaded")
     time.sleep(2.5)
 
     if not click_text_button(page, SELECTORS["save_button_texts"]):
@@ -225,7 +245,8 @@ def save_one(page, query, memo, list_name, auto_only):
         list_name = ask_list_name(page)
         print(f"  → 이후 모든 행을 '{list_name}' 리스트에 저장합니다.\n")
 
-    if not check_list(page, list_name):
+    dialog_frame = check_list(page, list_name)
+    if dialog_frame is None:
         if auto_only:
             return "fail:list", list_name
         manual(f"리스트 '{list_name}' 체크 실패. 직접 체크")
@@ -238,22 +259,7 @@ def save_one(page, query, memo, list_name, auto_only):
             return "fail:memo", list_name
         manual(f"메모 칸을 찾지 못함. 직접 입력: {memo}")
 
-    # 저장 창 안의 확인 버튼 — 첫 [저장] 버튼과 문구가 같을 수 있어 마지막으로 보이는 버튼을 누른다
-    clicked = False
-    for fr in reversed(all_frames(page)):
-        for t in SELECTORS["confirm_button_texts"]:
-            loc = fr.get_by_role("button", name=re.compile(rf"^\s*{re.escape(t)}\s*$"))
-            try:
-                vis = [loc.nth(i) for i in range(loc.count()) if loc.nth(i).is_visible()]
-                if vis:
-                    vis[-1].click()
-                    clicked = True
-                    break
-            except Exception:
-                pass
-        if clicked:
-            break
-    if not clicked:
+    if not click_confirm(page, dialog_frame):
         if auto_only:
             return "fail:confirm", list_name
         manual("최종 [저장] 버튼 클릭")
@@ -272,6 +278,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="브라우저 없이 검색어/메모 분리 결과만 출력")
     ap.add_argument("--auto-only", action="store_true", help="실패 시 수동 대기 없이 기록만 하고 다음 행으로")
     ap.add_argument("--start", type=int, default=1, help="시작 행 번호(1부터)")
+    ap.add_argument("--base-url", default="https://map.naver.com/p/search/", help=argparse.SUPPRESS)  # QA용
+    ap.add_argument("--headless", action="store_true", help=argparse.SUPPRESS)  # QA용
+    ap.add_argument("--browser-path", help="크롬 실행 파일 경로 (playwright install 대신 설치된 크롬 사용 시)")
     args = ap.parse_args()
 
     header, rows = read_rows(Path(args.file))
@@ -297,9 +306,12 @@ def main():
     done_path = Path(DONE_LOG)
     done = load_done(done_path)
     with sync_playwright() as p:
-        ctx = p.chromium.launch_persistent_context(args.profile, headless=False, viewport={"width": 1400, "height": 900})
+        opts = {"headless": args.headless, "viewport": {"width": 1400, "height": 900}}
+        if args.browser_path:
+            opts["executable_path"] = args.browser_path
+        ctx = p.chromium.launch_persistent_context(args.profile, **opts)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto("https://map.naver.com/p/")
+        page.goto(args.base_url.rsplit("/search/", 1)[0] + "/")
         input("네이버 로그인 상태를 확인하세요. 로그인 안 되어 있으면 브라우저에서 로그인 후 Enter: ")
 
         list_name = args.list_name
@@ -310,7 +322,7 @@ def main():
                 continue
             print(f"[{n}/{len(rows)}] {name} | 검색어='{q}' | 메모='{memo}'")
             try:
-                status, list_name = save_one(page, q, memo, list_name, args.auto_only)
+                status, list_name = save_one(page, args.base_url, q, memo, list_name, args.auto_only)
             except Exception as e:
                 status = f"error:{type(e).__name__}"
             print(f"   → {status}")
