@@ -2,3 +2,16 @@ node_modules/
 .wrangler/
 .dev.vars
 .DS_Store
+
+# 브라우저 자동화용 크롬 프로필 (쿠키·로그인 세션 포함 가능 → 커밋 금지)
+naver_map_profile/
+**/naver_map_profile/
+baemin/
+
+# naver_map_saver.py 실행 기록
+naver_map_saver_done.csv
+naver_map_saver_failed.csv
+__pycache__/
+*.pyc
+.naver_map_saver_installed
+naver_map_debug/
