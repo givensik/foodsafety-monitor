@@ -40,7 +40,14 @@ from pathlib import Path
 # 화면 요소 문구 (미검증 — 실제 화면과 다르면 여기만 수정)
 # ──────────────────────────────────────────────
 SELECTORS = {
-    "save_button_texts": ["저장"],                 # 검색 결과 패널의 저장 버튼
+    "save_button_texts": ["저장"],                 # 장소/주소 패널의 ☆ 저장 버튼 이름(aria-label·숨김 텍스트)
+    # [확인된 팩트 — 2026-11-05 실제 화면 캡처] 주소 검색 시 왼쪽 패널에 주소 제목 아래
+    #   ☆(저장) · 공유 아이콘 + [출발] [도착] 버튼이 한 줄로 나온다.
+    #   화면 맨 왼쪽 세로 메뉴에도 '저장'(기차 아래)이 있는데, 이건 저장 리스트 화면으로 이동하는 메뉴라 누르면 안 된다.
+    "anchor_texts": ["출발", "도착"],             # ☆ 버튼과 같은 줄에 있는 버튼 (위치 기준점)
+    "share_texts": ["공유"],                      # ☆ 옆 공유 아이콘 (제외 대상)
+    "nav_max_x": 90,                              # 이 x좌표(px)보다 왼쪽에 있는 요소 = 왼쪽 세로 메뉴로 보고 제외
+    "nav_href_keywords": ["favorite", "bookmark", "/my"],  # 저장 리스트 화면으로 가는 링크 (제외 대상)
     "memo_placeholders": ["메모"],                 # 저장 창 메모 입력칸 placeholder 일부
     "confirm_button_texts": ["저장", "완료", "확인"],  # 저장 창 최종 확인 버튼
     "list_item_selector": "[role='checkbox'], input[type='checkbox'], label, li",
@@ -117,6 +124,91 @@ def mark_done(path: Path, addr, name, status):
 # ──────────────────────────────────────────────
 def all_frames(page):
     return [page.main_frame] + [f for f in page.frames if f != page.main_frame]
+
+
+_CLICKABLE = "button, a, [role=button]"
+_SCAN_JS = """(sel) => [...document.querySelectorAll(sel)].map((e, i) => {
+    const r = e.getBoundingClientRect();
+    const vis = r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden';
+    const name = [e.getAttribute('aria-label'), e.getAttribute('title'), e.textContent]
+        .filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();
+    return {i, vis, x: r.x, y: r.y, w: r.width, h: r.height, name, href: e.getAttribute('href') || ''};
+})"""
+
+
+def _frame_offset(fr):
+    try:
+        el = fr.frame_element()
+        box = el.bounding_box()
+        return (box["x"], box["y"]) if box else (0, 0)
+    except Exception:
+        return (0, 0)  # main frame
+
+
+def _scan(fr):
+    ox, oy = _frame_offset(fr)
+    out = []
+    for c in fr.evaluate(_SCAN_JS, _CLICKABLE):
+        if not c["vis"]:
+            continue
+        c["x"] += ox; c["y"] += oy
+        c["cx"] = c["x"] + c["w"] / 2; c["cy"] = c["y"] + c["h"] / 2
+        c["frame"] = fr
+        out.append(c)
+    return out
+
+
+def _is_nav(c):
+    if c["x"] + c["w"] <= SELECTORS["nav_max_x"]:
+        return True
+    return any(k in c["href"] for k in SELECTORS["nav_href_keywords"])
+
+
+def find_place_save_button(page):
+    """주소/장소 패널의 ☆(저장) 버튼을 찾는다. 반환: (frame, index) 또는 None.
+    1순위: 이름에 '저장'이 들어간 버튼 중 [출발]/[도착] 버튼과 가장 가까운 것 (왼쪽 세로 메뉴 제외)
+    2순위: 이름이 없더라도 [출발] 버튼과 같은 줄·왼쪽에 있는 아이콘 버튼 중 가장 왼쪽 것 (공유 제외)"""
+    cands = []
+    for fr in all_frames(page):
+        try:
+            cands += _scan(fr)
+        except Exception:
+            pass
+    cands = [c for c in cands if not _is_nav(c)]
+    anchors = [c for c in cands
+               if any(re.fullmatch(rf"\s*{re.escape(t)}\s*", c["name"]) for t in SELECTORS["anchor_texts"])]
+    named = [c for c in cands
+             if any(t in c["name"] for t in SELECTORS["save_button_texts"])
+             and not any(a is c for a in anchors)]
+
+    if anchors:
+        a = min(anchors, key=lambda c: c["x"])  # [출발]
+        if named:
+            best = min(named, key=lambda c: (c["frame"] is not a["frame"], abs(c["cy"] - a["cy"]) + abs(c["cx"] - a["cx"])))
+            if abs(best["cy"] - a["cy"]) < 60:
+                return best["frame"], best["i"]
+        row = [c for c in cands
+               if c["frame"] is a["frame"] and abs(c["cy"] - a["cy"]) < 25 and c["cx"] < a["x"]
+               and not any(t in c["name"] for t in SELECTORS["share_texts"])]
+        if row:
+            best = min(row, key=lambda c: c["x"])
+            return best["frame"], best["i"]
+    if named:
+        best = min(named, key=lambda c: c["y"])
+        return best["frame"], best["i"]
+    return None
+
+
+def click_place_save_button(page, timeout=8000):
+    deadline = time.time() + timeout / 1000
+    while time.time() < deadline:
+        hit = find_place_save_button(page)
+        if hit:
+            fr, i = hit
+            fr.locator(_CLICKABLE).nth(i).click()
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def click_text_button(page, texts, timeout=5000):
@@ -267,11 +359,11 @@ def save_one(page, base_url, query, memo, list_name, auto_only):
     page.goto(base_url + urllib.parse.quote(query), wait_until="domcontentloaded")
     time.sleep(2.5)
 
-    if not click_text_button(page, SELECTORS["save_button_texts"]):
+    if not click_place_save_button(page):
         if auto_only:
             dump_debug(page, "save_button")
             return "fail:save_button", list_name
-        manual("[저장] 버튼을 찾지 못함. 검색 결과에서 직접 [저장] 클릭", page, "save_button")
+        manual("☆(저장) 버튼을 찾지 못함. 주소 제목 아래 [출발] 왼쪽의 ☆ 를 직접 클릭", page, "save_button")
     time.sleep(1.2)
 
     if list_name is None:
