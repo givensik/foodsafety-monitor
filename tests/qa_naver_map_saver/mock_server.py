@@ -17,9 +17,15 @@ MAIN = """<!doctype html><meta charset=utf-8><title>mock map</title>
 <iframe id=entryIframe src="/frame?q=%s" style="position:absolute;left:60px;top:0;width:400px;height:400px;border:0"></iframe>
 <div style="position:absolute;left:480px;top:0">지도</div>
 <div id=dlg role=dialog style="display:none;position:absolute;left:480px;top:40px;border:1px solid;background:#fff">
-  <h2>저장</h2>%s
-  <input id=memo placeholder="메모를 입력해 주세요">
+  <h2>저장 추가</h2>
+  <!-- 승환 설명(2026-11-05): '+메모, 별명, URL' 을 눌러야 메모 칸이 펼쳐짐 -->
+  <button id=more onclick="document.getElementById('extra').style.display='block'">+ 메모, 별명, URL</button>
+  <div id=extra style="display:none">
+    <input id=memo placeholder="내용 입력"><input id=alias placeholder="별명"><input id=url placeholder="URL">
+  </div>
+  %s
   <button onclick="document.getElementById('dlg').style.display='none'">취소</button>
+  <div style="height:40px"></div>
   <button id=ok>저장</button>
 </div>
 <script>
