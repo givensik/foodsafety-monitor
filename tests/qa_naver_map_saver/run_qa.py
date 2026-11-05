@@ -81,11 +81,27 @@ check("재실행 시 중복 저장 없음", len(saved2) == 4, len(saved2))
 check("재실행 시 건너뜀 4", "건너뜀 4" in r2.stdout, r2.stdout[-300:])
 
 # 5) --list 지정 시 질문 없이 해당 리스트로 저장
-(work / "naver_map_saver_done.csv").unlink()
+(work / "naver_map_saver_done.csv").unlink(missing_ok=True)
 r3 = subprocess.run(cmd + ["--list", "맛집", "--start", "5"], input="\n", text=True, capture_output=True, cwd=work, timeout=300)
 saved3 = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/saved").read())
 check("--list 맛집: 질문 없음", "저장할 리스트" not in r3.stdout)
 check("--list 맛집: 1건 저장, 리스트 맛집", len(saved3) == 5 and saved3[-1]["lists"] == ["맛집"], saved3[-1:])
+
+# 5-1) 왼쪽 세로 메뉴 '저장'은 한 번도 누르지 않아야 함 (2026-11-05 실제 화면에서 발생한 버그)
+navc = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/nav_clicks").read())
+check("왼쪽 세로 메뉴 '저장' 클릭 0회", navc == [], navc)
+
+# 5-2) ☆ 버튼에 이름이 없어도 [출발] 왼쪽 줄 기준으로 찾아 저장
+xlsx_nn = work / "이름없는별.xlsx"
+wbn = Workbook(); wsn = wbn.active
+wsn.append(["상호명", "주소"]); wsn.append(["별집", "NONAME 일산동 655-15번지 1층"])
+wbn.save(xlsx_nn)
+rn = subprocess.run([c if c != str(xlsx) else str(xlsx_nn) for c in cmd] + ["--list", "배민 매장"],
+                    input="\n", text=True, capture_output=True, cwd=work, timeout=300)
+saved_nn = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/saved").read())
+check("이름 없는 ☆ 버튼도 저장 성공", saved_nn[-1:] and saved_nn[-1]["memo"] == "별집 | 1층"
+      and saved_nn[-1]["lists"] == ["배민 매장"], (rn.stdout[-300:], saved_nn[-1:]))
+saved3 = saved_nn
 
 # 6) [저장] 버튼이 없는 화면 → 실패 기록 + 디버그(캡처/버튼목록) 저장
 xlsx2 = work / "실패케이스.xlsx"
@@ -99,6 +115,8 @@ dbg = list((work / "naver_map_debug").glob("*_save_button.*")) if (work / "naver
 check("버튼 없음 → fail:save_button 출력", "fail:save_button" in r4.stdout, r4.stdout[-300:])
 check("버튼 없음 → 저장 안 됨", len(saved4) == len(saved3))
 check("버튼 없음 → 실패 기록 파일", (work / "naver_map_saver_failed.csv").exists())
+navc = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/nav_clicks").read())
+check("버튼 없음 화면에서도 왼쪽 메뉴 '저장' 클릭 0회", navc == [], navc)
 check("디버그 캡처(.png)+버튼목록(.txt) 저장", {x.suffix for x in dbg} == {".png", ".txt"}, dbg)
 if dbg:
     txt = [x for x in dbg if x.suffix == ".txt"][0].read_text(encoding="utf-8")

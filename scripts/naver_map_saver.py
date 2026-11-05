@@ -7,11 +7,12 @@
        예) "서울특별시 강남구 역삼동 123-4번지 2층 201호"
            → 검색어 : "서울특별시 강남구 역삼동 123-4"
            → 상세주소: "2층 201호"   ('번지' 단어 자체는 제외)
-  2. 검색 결과의 [저장] 버튼 클릭
-  3. 저장 창에서 리스트(체크리스트) 체크
+  2. 주소 제목 아래 ☆(저장) 버튼 클릭 (화면 맨 왼쪽 세로 메뉴의 '저장' 은 누르지 않음)
+  3. 저장 창에서 '+메모, 별명, URL' 을 펼치고 메모 칸에 "상호명 | 상세주소" 입력
+  4. 저장 리스트 클릭
        - 첫 행에서만 "어느 리스트에 넣을지" 번호로 물어봄
-       - 이후 행은 같은 리스트에 자동으로 체크
-  4. 메모 칸에 "상호명 | 상세주소" 입력 후 [저장]
+       - 이후 행은 같은 리스트에 자동으로 클릭
+  5. 맨 아래 [저장] 클릭
 
 사용법
   pip install playwright openpyxl
@@ -40,8 +41,18 @@ from pathlib import Path
 # 화면 요소 문구 (미검증 — 실제 화면과 다르면 여기만 수정)
 # ──────────────────────────────────────────────
 SELECTORS = {
-    "save_button_texts": ["저장"],                 # 검색 결과 패널의 저장 버튼
+    "save_button_texts": ["저장"],                 # 장소/주소 패널의 ☆ 저장 버튼 이름(aria-label·숨김 텍스트)
+    # [확인된 팩트 — 2026-11-05 실제 화면 캡처] 주소 검색 시 왼쪽 패널에 주소 제목 아래
+    #   ☆(저장) · 공유 아이콘 + [출발] [도착] 버튼이 한 줄로 나온다.
+    #   화면 맨 왼쪽 세로 메뉴에도 '저장'(기차 아래)이 있는데, 이건 저장 리스트 화면으로 이동하는 메뉴라 누르면 안 된다.
+    "anchor_texts": ["출발", "도착"],             # ☆ 버튼과 같은 줄에 있는 버튼 (위치 기준점)
+    "share_texts": ["공유"],                      # ☆ 옆 공유 아이콘 (제외 대상)
+    "nav_max_x": 90,                              # 이 x좌표(px)보다 왼쪽에 있는 요소 = 왼쪽 세로 메뉴로 보고 제외
+    "nav_href_keywords": ["favorite", "bookmark", "/my"],  # 저장 리스트 화면으로 가는 링크 (제외 대상)
     "memo_placeholders": ["메모"],                 # 저장 창 메모 입력칸 placeholder 일부
+    # [확인된 팩트 — 2026-11-05 승환 설명] ☆ 를 누르면 저장 창이 뜨고, 메모 칸은 '+메모, 별명, URL' 을 눌러야 펼쳐진다.
+    #   그 아래 저장 리스트 중 하나를 클릭하고, 맨 아래 [저장] 을 누른다.
+    "memo_toggle_texts": ["메모"],                # '+메모, 별명, URL' 펼치기 버튼 (이름에 '메모' 포함)
     "confirm_button_texts": ["저장", "완료", "확인"],  # 저장 창 최종 확인 버튼
     "list_item_selector": "[role='checkbox'], input[type='checkbox'], label, li",
 }
@@ -119,6 +130,91 @@ def all_frames(page):
     return [page.main_frame] + [f for f in page.frames if f != page.main_frame]
 
 
+_CLICKABLE = "button, a, [role=button]"
+_SCAN_JS = """(sel) => [...document.querySelectorAll(sel)].map((e, i) => {
+    const r = e.getBoundingClientRect();
+    const vis = r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden';
+    const name = [e.getAttribute('aria-label'), e.getAttribute('title'), e.textContent]
+        .filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();
+    return {i, vis, x: r.x, y: r.y, w: r.width, h: r.height, name, href: e.getAttribute('href') || ''};
+})"""
+
+
+def _frame_offset(fr):
+    try:
+        el = fr.frame_element()
+        box = el.bounding_box()
+        return (box["x"], box["y"]) if box else (0, 0)
+    except Exception:
+        return (0, 0)  # main frame
+
+
+def _scan(fr):
+    ox, oy = _frame_offset(fr)
+    out = []
+    for c in fr.evaluate(_SCAN_JS, _CLICKABLE):
+        if not c["vis"]:
+            continue
+        c["x"] += ox; c["y"] += oy
+        c["cx"] = c["x"] + c["w"] / 2; c["cy"] = c["y"] + c["h"] / 2
+        c["frame"] = fr
+        out.append(c)
+    return out
+
+
+def _is_nav(c):
+    if c["x"] + c["w"] <= SELECTORS["nav_max_x"]:
+        return True
+    return any(k in c["href"] for k in SELECTORS["nav_href_keywords"])
+
+
+def find_place_save_button(page):
+    """주소/장소 패널의 ☆(저장) 버튼을 찾는다. 반환: (frame, index) 또는 None.
+    1순위: 이름에 '저장'이 들어간 버튼 중 [출발]/[도착] 버튼과 가장 가까운 것 (왼쪽 세로 메뉴 제외)
+    2순위: 이름이 없더라도 [출발] 버튼과 같은 줄·왼쪽에 있는 아이콘 버튼 중 가장 왼쪽 것 (공유 제외)"""
+    cands = []
+    for fr in all_frames(page):
+        try:
+            cands += _scan(fr)
+        except Exception:
+            pass
+    cands = [c for c in cands if not _is_nav(c)]
+    anchors = [c for c in cands
+               if any(re.fullmatch(rf"\s*{re.escape(t)}\s*", c["name"]) for t in SELECTORS["anchor_texts"])]
+    named = [c for c in cands
+             if any(t in c["name"] for t in SELECTORS["save_button_texts"])
+             and not any(a is c for a in anchors)]
+
+    if anchors:
+        a = min(anchors, key=lambda c: c["x"])  # [출발]
+        if named:
+            best = min(named, key=lambda c: (c["frame"] is not a["frame"], abs(c["cy"] - a["cy"]) + abs(c["cx"] - a["cx"])))
+            if abs(best["cy"] - a["cy"]) < 60:
+                return best["frame"], best["i"]
+        row = [c for c in cands
+               if c["frame"] is a["frame"] and abs(c["cy"] - a["cy"]) < 25 and c["cx"] < a["x"]
+               and not any(t in c["name"] for t in SELECTORS["share_texts"])]
+        if row:
+            best = min(row, key=lambda c: c["x"])
+            return best["frame"], best["i"]
+    if named:
+        best = min(named, key=lambda c: c["y"])
+        return best["frame"], best["i"]
+    return None
+
+
+def click_place_save_button(page, timeout=8000):
+    deadline = time.time() + timeout / 1000
+    while time.time() < deadline:
+        hit = find_place_save_button(page)
+        if hit:
+            fr, i = hit
+            fr.locator(_CLICKABLE).nth(i).click()
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def click_text_button(page, texts, timeout=5000):
     """모든 frame(searchIframe/entryIframe 포함)에서 문구가 일치하는 보이는 버튼을 클릭."""
     deadline = time.time() + timeout / 1000
@@ -138,7 +234,25 @@ def click_text_button(page, texts, timeout=5000):
     return False
 
 
-def find_memo_input(page):
+_INPUTS_JS = """() => [...document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=hidden]), textarea')]
+    .map((e, i) => { const r = e.getBoundingClientRect(); return {i, vis: r.width > 0 && r.height > 0}; })
+    .filter(o => o.vis).map(o => o.i)"""
+_INPUT_SEL = "input:not([type=checkbox]):not([type=radio]):not([type=hidden]), textarea"
+
+
+def _visible_inputs(page):
+    out = set()
+    for fr in all_frames(page):
+        try:
+            out |= {(fr, i) for i in fr.evaluate(_INPUTS_JS)}
+        except Exception:
+            pass
+    return out
+
+
+def find_memo_input(page, before=None):
+    """1순위: placeholder 에 '메모' 가 들어간 입력칸.
+    2순위: '+메모, 별명, URL' 을 펼친 뒤 새로 나타난 입력칸 중 첫 번째 (메모·별명·URL 순서이므로)."""
     for fr in all_frames(page):
         for ph in SELECTORS["memo_placeholders"]:
             loc = fr.locator(f"input[placeholder*='{ph}'], textarea[placeholder*='{ph}']")
@@ -147,7 +261,34 @@ def find_memo_input(page):
                     return loc.first
             except Exception:
                 pass
+    if before is not None:
+        new = sorted(_visible_inputs(page) - before, key=lambda x: x[1])
+        if new:
+            fr, i = new[0]
+            return fr.locator(_INPUT_SEL).nth(i)
     return None
+
+
+def open_memo_section(page, timeout=4000):
+    """'+메모, 별명, URL' 펼치기 버튼 클릭. 이미 메모 칸이 보이면 누르지 않는다."""
+    if find_memo_input(page):
+        return True
+    deadline = time.time() + timeout / 1000
+    while time.time() < deadline:
+        cands = []
+        for fr in all_frames(page):
+            try:
+                cands += _scan(fr)
+            except Exception:
+                pass
+        cands = [c for c in cands if not _is_nav(c)
+                 and any(t in c["name"] for t in SELECTORS["memo_toggle_texts"])]
+        if cands:
+            c = min(cands, key=lambda c: len(c["name"]))
+            c["frame"].locator(_CLICKABLE).nth(c["i"]).click()
+            return True
+        time.sleep(0.4)
+    return False
 
 
 def visible_list_names(page):
@@ -243,23 +384,22 @@ def manual(msg, page=None, step="manual"):
     input(f"  [수동 처리 필요] {msg} — 브라우저에서 직접 처리한 뒤 Enter (건너뛰려면 Enter 후 다음 행) ")
 
 
-def click_confirm(page, dialog_frame):
-    """저장 창 안의 최종 확인 버튼 클릭.
-    검색 패널의 [저장] 버튼과 문구가 같을 수 있으므로, 리스트 체크박스가 있던 frame 안에서
-    role=dialog 내부 버튼을 우선 찾고, 없으면 그 frame 의 마지막으로 보이는 버튼을 누른다."""
-    frames = [dialog_frame] if dialog_frame else []
-    frames += [f for f in all_frames(page) if f not in frames]
-    for fr in frames:
-        for scope in (fr.locator("[role='dialog']"), fr.locator("body")):
-            for t in SELECTORS["confirm_button_texts"]:
-                loc = scope.get_by_role("button", name=re.compile(rf"^\s*{re.escape(t)}\s*$"))
-                try:
-                    vis = [loc.nth(i) for i in range(loc.count()) if loc.nth(i).is_visible()]
-                    if vis:
-                        vis[-1].click()
-                        return True
-                except Exception:
-                    pass
+def click_confirm(page, dialog_frame=None):
+    """저장 창 맨 아래 [저장] 버튼 클릭.
+    ☆ 버튼·왼쪽 세로 메뉴도 이름이 '저장' 일 수 있으므로, 이름이 정확히 확인 문구인 버튼 중
+    왼쪽 메뉴를 빼고 화면에서 가장 아래(y 최대)에 있는 것을 누른다."""
+    cands = []
+    for fr in all_frames(page):
+        try:
+            cands += _scan(fr)
+        except Exception:
+            pass
+    for t in SELECTORS["confirm_button_texts"]:
+        hit = [c for c in cands if not _is_nav(c) and re.fullmatch(rf"\s*{re.escape(t)}\s*", c["name"])]
+        if hit:
+            c = max(hit, key=lambda c: c["cy"])
+            c["frame"].locator(_CLICKABLE).nth(c["i"]).click()
+            return True
     return False
 
 
@@ -267,13 +407,28 @@ def save_one(page, base_url, query, memo, list_name, auto_only):
     page.goto(base_url + urllib.parse.quote(query), wait_until="domcontentloaded")
     time.sleep(2.5)
 
-    if not click_text_button(page, SELECTORS["save_button_texts"]):
+    if not click_place_save_button(page):
         if auto_only:
             dump_debug(page, "save_button")
             return "fail:save_button", list_name
-        manual("[저장] 버튼을 찾지 못함. 검색 결과에서 직접 [저장] 클릭", page, "save_button")
+        manual("☆(저장) 버튼을 찾지 못함. 주소 제목 아래 [출발] 왼쪽의 ☆ 를 직접 클릭", page, "save_button")
     time.sleep(1.2)
 
+    # ③ '+메모, 별명, URL' 펼치기 → ④ 메모 입력
+    if memo:
+        before = _visible_inputs(page)
+        open_memo_section(page)
+        time.sleep(0.6)
+        memo_el = find_memo_input(page, before)
+        if memo_el:
+            memo_el.fill(memo)
+        else:
+            if auto_only:
+                dump_debug(page, "memo")
+                return "fail:memo", list_name
+            manual(f"'+메모, 별명, URL' 을 눌러 메모 칸에 직접 입력: {memo}", page, "memo")
+
+    # ⑤ 저장 리스트 클릭 (첫 행에서만 어느 리스트인지 물어봄)
     if list_name is None:
         list_name = ask_list_name(page)
         print(f"  → 이후 모든 행을 '{list_name}' 리스트에 저장합니다.\n")
@@ -283,17 +438,9 @@ def save_one(page, base_url, query, memo, list_name, auto_only):
         if auto_only:
             dump_debug(page, "list")
             return "fail:list", list_name
-        manual(f"리스트 '{list_name}' 체크 실패. 직접 체크", page, "list")
+        manual(f"리스트 '{list_name}' 체크 실패. 직접 클릭", page, "list")
 
-    memo_el = find_memo_input(page)
-    if memo_el:
-        memo_el.fill(memo)
-    elif memo:
-        if auto_only:
-            dump_debug(page, "memo")
-            return "fail:memo", list_name
-        manual(f"메모 칸을 찾지 못함. 직접 입력: {memo}", page, "memo")
-
+    # ⑥ 맨 아래 [저장]
     if not click_confirm(page, dialog_frame):
         if auto_only:
             dump_debug(page, "confirm")

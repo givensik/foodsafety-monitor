@@ -5,14 +5,27 @@ import json, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SAVED = []
+NAV_CLICKS = []
 LISTS = ["기본 리스트", "배민 매장", "맛집"]
 
 MAIN = """<!doctype html><meta charset=utf-8><title>mock map</title>
-<body><h1>지도</h1><iframe id=searchIframe src="/frame?q=%s" style="width:400px;height:300px"></iframe>
-<div id=dlg role=dialog style="display:none;border:1px solid">
-  <h2>저장</h2>%s
-  <input id=memo placeholder="메모를 입력해 주세요">
+<body style="margin:0">
+<nav style="position:fixed;left:0;top:0;width:56px;height:100%%;display:flex;flex-direction:column;gap:8px;padding-top:60px">
+  <button>지도 홈</button><button>길찾기</button><button>버스</button><button>기차</button>
+  <button onclick="location.href='/p/favorite/myPlace'">저장</button><button>더보기</button>
+</nav>
+<iframe id=entryIframe src="/frame?q=%s" style="position:absolute;left:60px;top:0;width:400px;height:400px;border:0"></iframe>
+<div style="position:absolute;left:480px;top:0">지도</div>
+<div id=dlg role=dialog style="display:none;position:absolute;left:480px;top:40px;border:1px solid;background:#fff">
+  <h2>저장 추가</h2>
+  <!-- 승환 설명(2026-11-05): '+메모, 별명, URL' 을 눌러야 메모 칸이 펼쳐짐 -->
+  <button id=more onclick="document.getElementById('extra').style.display='block'">+ 메모, 별명, URL</button>
+  <div id=extra style="display:none">
+    <input id=memo placeholder="내용 입력"><input id=alias placeholder="별명"><input id=url placeholder="URL">
+  </div>
+  %s
   <button onclick="document.getElementById('dlg').style.display='none'">취소</button>
+  <div style="height:40px"></div>
   <button id=ok>저장</button>
 </div>
 <script>
@@ -27,8 +40,18 @@ document.querySelectorAll('#dlg [role=checkbox]').forEach(e => e.onclick = () =>
   e.setAttribute('aria-checked', e.getAttribute('aria-checked') === 'true' ? 'false' : 'true'));
 </script></body>"""
 
-FRAME = """<!doctype html><meta charset=utf-8><body><div>검색결과: %s</div>
-<button onclick="parent.openSave()">저장</button><button>공유</button></body>"""
+# 실제 화면 캡처(2026-11-05) 구조: 주소 제목 → 한 줄에 [☆][공유] ... [출발][도착]
+FRAME = """<!doctype html><meta charset=utf-8><body>
+<h2>%s</h2>
+<div style="display:flex;align-items:center;gap:6px">
+  %s
+  <button aria-label="공유">⇪</button>
+  <span style="flex:1"></span>
+  <button>출발</button><button>도착</button>
+</div>
+<div>이 주소의 장소</div></body>"""
+STAR_NAMED = '<button onclick="parent.openSave()"><span style="position:absolute;width:1px;height:1px;overflow:hidden">저장</span>☆</button>'
+STAR_NONAME = '<button onclick="parent.openSave()">☆</button>'  # 이름 없는 아이콘 버튼
 
 
 class H(BaseHTTPRequestHandler):
@@ -50,7 +73,12 @@ class H(BaseHTTPRequestHandler):
             if "NOSAVE" in q:  # [저장] 버튼이 없는 화면 (실패/디버그 저장 경로 검증용)
                 self.send(f"<!doctype html><meta charset=utf-8><body>검색결과 없음: {q}</body>")
             else:
-                self.send(FRAME % q)
+                self.send(FRAME % (q, STAR_NONAME if "NONAME" in q else STAR_NAMED))
+        elif u.path.startswith("/p/favorite"):
+            NAV_CLICKS.append(u.path)  # 왼쪽 세로 메뉴 '저장'을 잘못 누른 경우
+            self.send("<!doctype html><meta charset=utf-8><body><h2>저장 리스트</h2></body>")
+        elif u.path == "/nav_clicks":
+            self.send(json.dumps(NAV_CLICKS), "application/json")
         elif u.path == "/saved":
             self.send(json.dumps(SAVED, ensure_ascii=False), "application/json")
         else:
