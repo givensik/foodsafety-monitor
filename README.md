@@ -44,6 +44,17 @@ foodsafety-monitor/
 
 ---
 
+## 2-1. 부가 도구: 엑셀 주소 → 네이버 지도 저장 리스트 자동 등록
+
+엑셀의 상호명·주소를 네이버 지도에서 찾아 ☆ 저장 리스트에 넣고, 메모에 `상호명 | 상세주소`를 적어 주는 도구입니다. 대시보드와는 별개로 동작합니다.
+
+- **전체 정리**: [docs/NAVER_MAP_SAVER_PROJECT_SUMMARY.md](docs/NAVER_MAP_SAVER_PROJECT_SUMMARY.md)
+- **사용 안내**: [docs/NAVER_MAP_SAVER_GUIDE.md](docs/NAVER_MAP_SAVER_GUIDE.md) (Windows는 `scripts/naver_map_saver.bat`에 엑셀을 끌어다 놓기)
+- **크롬 프로필 관리**: [docs/NAVER_MAP_PROFILE.md](docs/NAVER_MAP_PROFILE.md)
+- **QA**: `python tests/qa_naver_map_saver/run_qa.py` (목업 페이지 기준, 실제 네이버 화면 검증은 아직 안 됨)
+
+---
+
 ## 3. 다른 PC에서 클론 후 로컬 실행 방법 (`http://localhost:8788`)
 
 Node.js(v18 이상)만 설치되어 있으면 별도 설정 없이 프론트엔드(`public/index.html`), 백엔드 API(`functions/api/businesses.js`, `functions/api/ledger.js`), 로컬 에뮬레이션 KV(`DETECTED_STORES`)가 모두 로컬에서 동일하게 작동합니다.
